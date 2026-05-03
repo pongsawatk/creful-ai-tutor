@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1565C0">
+  <meta name="description" content="ครูช่าง AI สำหรับหัวหน้าช่าง LAS">
+  <title>ครูช่าง AI</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="config.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="top-app-bar">
+      <div class="brand-mark" aria-hidden="true">
+        <img src="Logo/Creful%20Logo.png" alt="">
+      </div>
+      <div class="brand-copy">
+        <h1>ครูช่าง AI</h1>
+        <p>Creful Site Co-pilot</p>
+      </div>
+      <div class="dev-badge" id="devBadge" hidden>MOCK MODE — ยังไม่ต่อ n8n</div>
+      <div class="session-pill" id="sessionPill">0/50</div>
+    </header>
+
+    <main class="chat-panel" id="chatPanel" aria-live="polite">
+      <section class="empty-state" id="emptyState">
+        <div class="empty-intro">
+          <p class="eyebrow">LAS Foreman AI Tutor</p>
+          <h2>ถามเรื่องแบบ เอกสาร และสถานการณ์หน้างานได้ครับ</h2>
+          <p>เลือกหัวข้อเร็ว หรือพิมพ์คำถามของคุณด้านล่างครับ</p>
+        </div>
+        <div class="quick-grid" id="quickGrid"></div>
+      </section>
+    </main>
+
+    <div class="cap-banner" id="capBanner" hidden>
+      📚 ครบ 50 คำถามต่อ session แล้วครับ — รีเฟรชหน้าเพื่อเริ่มใหม่
+    </div>
+
+    <footer class="composer-shell">
+      <div class="status-line" id="statusLine">🟢 พร้อมตอบ</div>
+      <form class="composer" id="composerForm" autocomplete="off">
+        <label class="sr-only" for="messageInput">พิมพ์คำถาม</label>
+        <textarea id="messageInput" rows="1" placeholder="พิมพ์คำถามหน้างานครับ" maxlength="500"></textarea>
+        <button class="send-button" id="sendButton" type="submit" aria-label="ส่งคำถาม">
+          ส่ง
+        </button>
+      </form>
+    </footer>
+
+    <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+  </div>
+
+  <script>
+    (() => {
+      const runtimeConfig = typeof CONFIG !== "undefined" ? CONFIG : {};
+      const config = {
+        N8N_WEBHOOK_URL: runtimeConfig.N8N_WEBHOOK_URL || "",
+        KB_BASE_URL: runtimeConfig.KB_BASE_URL || "",
+        SESSION_MAX_QUESTIONS: Number(runtimeConfig.SESSION_MAX_QUESTIONS || 50),
+        INPUT_MAX_LENGTH: Number(runtimeConfig.INPUT_MAX_LENGTH || 500)
+      };
+
+      const citationRegex = /\*\(📚 ข้อมูล: (\d+)% \| 🎯 มั่นใจ: (\d+)% \| 🔗 Ref: ([^)]+)\)\*/;
+      const escalationRegex = /^ESCALATE:\s*(.+)$/im;
+      const numberRegex = /(?:\d+(?:[.,]\d+)?\s*(?:%|มม\.?|ซม\.?|เมตร|ม\.|วัน|ชั่วโมง|บาท|ตร\.ม\.|m2|mm|cm|kg|กก\.?)?)/i;
+      const statusTimers = new Set();
+
+      const storageKeys = {
+        sessionId: "creful_session_id",
+        history: "creful_chat_history",
+        nickname: "creful_nickname",
+        studentId: "creful_student_id",
+        courseId: "creful_course_id",
+        userMessageCount: "creful_user_message_count"
+      };
+
+      const quickActions = [
+        {
+          icon: "📘",
+          title: "Module 1",
+          text: "Drawing Fundamentals & Mindset",
+          prompt: "ช่วยทบทวน Module 1 เรื่องพื้นฐานการอ่านแบบให้ผมแบบสั้น ๆ ครับ"
+        },
+        {
+          icon: "📐",
+          title: "Module 2",
+          text: "Interior Drawing",
+          prompt: "ช่วยอธิบาย Module 2 เรื่อง Interior Drawing ที่หัวหน้าช่างควรเช็คครับ"
+        },
+        {
+          icon: "🔍",
+          title: "Module 3",
+          text: "Detail Drawings",
+          prompt: "ช่วยสรุป Module 3 เรื่อง Detail Drawings และจุดที่ต้องระวังหน้างานครับ"
+        },
+        {
+          icon: "📋",
+          title: "Module 4",
+          text: "BOQ / Spec / Document around Drawings",
+          prompt: "ช่วยอธิบาย Module 4 เรื่อง BOQ, Spec และเอกสารรอบแบบครับ"
+        },
+        {
+          icon: "🏗️",
+          title: "Module 5",
+          text: "Foreman Workflow & Site Operations",
+          prompt: "ช่วยทบทวน Module 5 เรื่อง workflow หัวหน้าช่างและการเดินงานหน้างานครับ"
+        },
+        {
+          icon: "🚨",
+          title: "Scenario",
+          text: "Scenario หน้างาน",
+          prompt: "ผมเจอสถานการณ์หน้างาน ช่วยไล่ขั้นตอนตัดสินใจให้หน่อยครับ"
+        },
+        {
+          icon: "🧪",
+          title: "Quiz",
+          text: "Quiz ทบทวน",
+          prompt: "ช่วยถาม quiz ทบทวนความรู้หัวหน้าช่างให้ผมทีละข้อครับ"
+        }
+      ];
+
+      const elements = {
+        chatPanel: document.getElementById("chatPanel"),
+        emptyState: document.getElementById("emptyState"),
+        quickGrid: document.getElementById("quickGrid"),
+        composerForm: document.getElementById("composerForm"),
+        messageInput: document.getElementById("messageInput"),
+        sendButton: document.getElementById("sendButton"),
+        devBadge: document.getElementById("devBadge"),
+        statusLine: document.getElementById("statusLine"),
+        sessionPill: document.getElementById("sessionPill"),
+        capBanner: document.getElementById("capBanner"),
+        toast: document.getElementById("toast")
+      };
+
+      const state = {
+        sessionId: getOrCreateSessionId(),
+        studentId: "",
+        courseId: "",
+        nickname: "",
+        mode: "AWAITING_NAME",
+        history: readJson(storageKeys.history, []),
+        userMessageCount: Number(localStorage.getItem(storageKeys.userMessageCount) || 0),
+        isThinking: false
+      };
+
+      init();
+
+      function init() {
+        applyUrlParams();
+        state.studentId = localStorage.getItem(storageKeys.studentId) || "";
+        state.courseId = localStorage.getItem(storageKeys.courseId) || "";
+        state.nickname = localStorage.getItem(storageKeys.nickname) || "";
+        state.mode = state.nickname ? "ACTIVE" : "AWAITING_NAME";
+        state.userMessageCount = Math.max(state.userMessageCount, countUserMessages(state.history));
+
+        elements.messageInput.maxLength = config.INPUT_MAX_LENGTH;
+        renderQuickActions();
+        renderHistory();
+        updateSessionUi();
+        updateComposerState();
+        updateMockBadge();
+
+        if (state.mode === "AWAITING_NAME" && state.history.length === 0) {
+          renderNamePrompt();
+        }
+
+        elements.composerForm.addEventListener("submit", handleSubmit);
+        elements.messageInput.addEventListener("input", autoGrowInput);
+        elements.messageInput.addEventListener("paste", handlePaste);
+      }
+
+      function applyUrlParams() {
+        const params = new URLSearchParams(window.location.search);
+        persistParam(params, "student_id", storageKeys.studentId);
+        persistParam(params, "course_id", storageKeys.courseId);
+        persistParam(params, "nickname", storageKeys.nickname);
+      }
+
+      function persistParam(params, paramName, key) {
+        const value = params.get(paramName);
+        if (value && value.trim()) {
+          localStorage.setItem(key, value.trim());
+        }
+      }
+
+      function getOrCreateSessionId() {
+        const existing = localStorage.getItem(storageKeys.sessionId);
+        if (existing) return existing;
+        const generated = `creful_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem(storageKeys.sessionId, generated);
+        return generated;
+      }
+
+      function readJson(key, fallback) {
+        try {
+          const raw = localStorage.getItem(key);
+          return raw ? JSON.parse(raw) : fallback;
+        } catch (error) {
+          console.warn("Cannot read localStorage JSON", key, error);
+          return fallback;
+        }
+      }
+
+      function saveHistory() {
+        localStorage.setItem(storageKeys.history, JSON.stringify(state.history));
+      }
+
+      function countUserMessages(history) {
+        return history.filter((item) => item.role === "user").length;
+      }
+
+      function renderQuickActions() {
+        elements.quickGrid.innerHTML = "";
+        quickActions.forEach((action) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "quick-card";
+          button.innerHTML = `
+            <span class="quick-icon" aria-hidden="true">${action.icon}</span>
+            <span class="quick-title">${action.title}</span>
+            <span class="quick-text">${action.text}</span>
+          `;
+          button.addEventListener("click", () => {
+            if (state.mode !== "ACTIVE") {
+              showToast("บอกชื่อเล่นก่อนเลือกหัวข้อครับ");
+              elements.messageInput.focus();
+              return;
+            }
+            sendText(action.prompt);
+          });
+          elements.quickGrid.appendChild(button);
+        });
+      }
+
+      function renderNamePrompt() {
+        const prompt = {
+          role: "bot",
+          content: "สวัสดีครับ ผมครูช่าง AI บอกชื่อเล่นก่อนเริ่มถามงานได้ครับ",
+          meta: { system: true }
+        };
+        renderMessage(prompt);
+        elements.messageInput.placeholder = "พิมพ์ชื่อเล่นครับ";
+      }
+
+      function renderHistory() {
+        Array.from(elements.chatPanel.querySelectorAll(".message-group")).forEach((node) => node.remove());
+        state.history.forEach(renderMessage);
+        toggleEmptyState();
+        scrollToBottom();
+      }
+
+      function renderMessage(message) {
+        const group = document.createElement("article");
+        group.className = `message-group ${message.role === "user" ? "is-user" : "is-bot"}`;
+
+        if (message.role === "bot" && message.meta?.kb_relevance < 50) {
+          group.appendChild(createTrustWarning());
+        }
+
+        const bubble = document.createElement("div");
+        bubble.className = "bubble";
+        bubble.textContent = message.content || "";
+        group.appendChild(bubble);
+
+        if (message.role === "bot") {
+          const meta = message.meta || {};
+          if (meta.kb_relevance !== undefined && meta.confidence !== undefined && meta.doc_id) {
+            group.appendChild(createCitationChip(meta));
+          }
+          if (meta.showEngineerCta) {
+            group.appendChild(createEngineerCta());
+          }
+          if (meta.escalated) {
+            group.appendChild(createEscalationCard(meta.escalate_reason || "ต้องให้ Trainer ตรวจสอบ"));
+          }
+          if (!meta.system) {
+            group.appendChild(createFeedbackButtons(message.id));
+          }
+        }
+
+        elements.chatPanel.appendChild(group);
+        toggleEmptyState();
+        scrollToBottom();
+      }
+
+      function createTrustWarning() {
+        const warning = document.createElement("div");
+        warning.className = "trust-warning";
+        warning.textContent = "⚠️ ข้อมูลส่วนใหญ่จากความรู้ทั่วไป กรุณาตรวจซ้ำก่อนใช้จริงครับ";
+        return warning;
+      }
+
+      function createCitationChip(meta) {
+        const chip = document.createElement("div");
+        chip.className = `citation-chip ${meta.kb_relevance < 50 ? "is-warning" : ""}`;
+        chip.textContent = `📚 ${meta.kb_relevance}% | 🎯 ${meta.confidence}% | 🔗 ${meta.doc_id}`;
+        return chip;
+      }
+
+      function createEngineerCta() {
+        const chip = document.createElement("div");
+        chip.className = "engineer-chip";
+        chip.textContent = "🧑‍💼 ตรวจกับวิศวกรก่อนใช้จริง";
+        return chip;
+      }
+
+      function createEscalationCard(reason) {
+        const card = document.createElement("div");
+        card.className = "escalation-card";
+        const text = document.createElement("p");
+        text.textContent = `⚠️ ส่งต่อให้ Trainer แล้วครับ — เหตุผล: ${reason}`;
+        const dismiss = document.createElement("button");
+        dismiss.type = "button";
+        dismiss.textContent = "ปิดครับ";
+        dismiss.addEventListener("click", () => card.remove());
+        card.append(text, dismiss);
+        return card;
+      }
+
+      function createFeedbackButtons(messageId) {
+        const feedback = document.createElement("div");
+        feedback.className = "feedback-row";
+        [
+          ["understood", "👍 เข้าใจแล้ว"],
+          ["unclear", "👎 ยังไม่ชัด"],
+          ["example", "🧩 ขอ Example"],
+          ["report_wrong", "📝 รายงานผิด"]
+        ].forEach(([type, label]) => {
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "feedback-button";
+          button.textContent = label;
+          button.addEventListener("click", () => {
+            button.classList.add("is-selected");
+            logEvent("feedback", { message_id: messageId, feedback_type: type });
+            showToast("บันทึก feedback แล้วครับ");
+          });
+          feedback.appendChild(button);
+        });
+        return feedback;
+      }
+
+      function toggleEmptyState() {
+        const hasMessages = state.history.length > 0 || elements.chatPanel.querySelector(".message-group");
+        elements.emptyState.hidden = hasMessages;
+      }
+
+      async function handleSubmit(event) {
+        event.preventDefault();
+        const text = elements.messageInput.value.trim();
+        if (!text || state.isThinking) return;
+        await sendText(text);
+      }
+
+      async function sendText(text) {
+        if (state.userMessageCount >= config.SESSION_MAX_QUESTIONS) {
+          applySessionCap();
+          return;
+        }
+
+        clearInput();
+
+        if (state.mode === "AWAITING_NAME") {
+          state.nickname = text.slice(0, config.INPUT_MAX_LENGTH);
+          localStorage.setItem(storageKeys.nickname, state.nickname);
+          state.mode = "ACTIVE";
+          elements.messageInput.placeholder = "พิมพ์คำถามหน้างานครับ";
+          const greeting = {
+            id: createMessageId(),
+            role: "bot",
+            content: `ยินดีครับ ${state.nickname} ถามเรื่องแบบ เอกสาร หรือสถานการณ์หน้างานได้เลยครับ`,
+            meta: { system: true }
+          };
+          renderMessage(greeting);
+          showToast("เริ่มใช้งานได้ครับ");
+          return;
+        }
+
+        const userMessage = {
+          id: createMessageId(),
+          role: "user",
+          content: text,
+          created_at: new Date().toISOString()
+        };
+
+        state.history.push(userMessage);
+        state.userMessageCount += 1;
+        localStorage.setItem(storageKeys.userMessageCount, String(state.userMessageCount));
+        saveHistory();
+        renderMessage(userMessage);
+        updateSessionUi();
+
+        if (state.userMessageCount === Math.max(0, config.SESSION_MAX_QUESTIONS - 5)) {
+          showToast("⚠️ ใกล้ครบ 50 คำถามต่อ session แล้วครับ");
+        }
+
+        if (state.userMessageCount >= config.SESSION_MAX_QUESTIONS) {
+          applySessionCap();
+        }
+
+        await callWebhook(text);
+      }
+
+      async function callWebhook(text) {
+        const startedAt = performance.now();
+        state.isThinking = true;
+        updateComposerState();
+        setStatus("thinking");
+
+        const payload = {
+          session_id: state.sessionId,
+          student_id: state.studentId,
+          course_id: state.courseId,
+          nickname: state.nickname,
+          message: text,
+          history: state.history.slice(-20).map(({ role, content }) => ({ role, content })),
+          citation_parse_failed: false
+        };
+
+        try {
+          if (isMockMode()) {
+            await wait(350);
+            const botMessage = normalizeBotResponse(getMockResponse(text));
+            botMessage.meta.response_time_ms = Math.round(performance.now() - startedAt);
+            finishBotMessage(botMessage);
+            return;
+          }
+
+          const response = await fetch(config.N8N_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+
+          if (!response.ok) {
+            throw new Error(`Webhook failed with ${response.status}`);
+          }
+
+          const raw = await readWebhookResponse(response);
+          const botMessage = normalizeBotResponse(raw);
+          botMessage.meta.response_time_ms = Math.round(performance.now() - startedAt);
+          finishBotMessage(botMessage);
+        } catch (error) {
+          console.error(error);
+          setStatus("error");
+          finishBotMessage({
+            id: createMessageId(),
+            role: "bot",
+            content: "ระบบขัดข้องหรือยังไม่ได้ตั้งค่า Webhook ครับ กรุณาลองใหม่หลังตรวจค่า CONFIG.N8N_WEBHOOK_URL ครับ",
+            created_at: new Date().toISOString(),
+            meta: {
+              citation_parse_failed: true,
+              showEngineerCta: false,
+              error: true
+            }
+          });
+        } finally {
+          state.isThinking = false;
+          updateComposerState();
+        }
+      }
+
+      async function readWebhookResponse(response) {
+        const contentType = response.headers.get("content-type") || "";
+        if (contentType.includes("application/json")) {
+          return response.json();
+        }
+        const text = await response.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          return text;
+        }
+      }
+
+      function isMockMode() {
+        const params = new URLSearchParams(window.location.search);
+        return !config.N8N_WEBHOOK_URL || params.get("mock") === "1";
+      }
+
+      function updateMockBadge() {
+        elements.devBadge.hidden = !isMockMode();
+      }
+
+      function getMockResponse(message) {
+        if (message.includes("citation") || message.includes("RFI")) {
+          return "ควรออก RFI ก่อนเริ่มทำงานครับ\n\n*(📚 ข้อมูล: 85% | 🎯 มั่นใจ: 92% | 🔗 Ref: Foreman_M4.1_TriangleCheck)*";
+        }
+
+        if (message.includes("low")) {
+          return "ข้อมูลในคู่มือยังครอบคลุมไม่ครบครับ พี่ช่างควรถาม PM ประกอบก่อนใช้จริง\n\n*(📚 ข้อมูล: 42% | 🎯 มั่นใจ: 68% | 🔗 Ref: ความรู้ทั่วไป)*";
+        }
+
+        if (message.includes("escalate")) {
+          return "อย่าเพิ่งทำเองครับ เคสนี้ต้องให้ผู้เกี่ยวข้องตรวจสอบก่อน\nESCALATE: Fire-rated / Structural safety\n\n*(📚 ข้อมูล: 25% | 🎯 มั่นใจ: 60% | 🔗 Ref: Escalation_Matrix)*";
+        }
+
+        return "รับทราบครับ นี่คือคำตอบทดสอบจาก mock mode\n\n*(📚 ข้อมูล: 80% | 🎯 มั่นใจ: 88% | 🔗 Ref: Mock_Test)*";
+      }
+
+      function wait(ms) {
+        return new Promise((resolve) => window.setTimeout(resolve, ms));
+      }
+
+      function normalizeBotResponse(raw) {
+        const isObject = raw && typeof raw === "object" && !Array.isArray(raw);
+        let answer = isObject ? String(raw.answer || raw.message || "") : String(raw || "");
+        if (!answer.trim()) {
+          answer = "ยังไม่ได้รับคำตอบจากระบบครับ";
+        }
+
+        const parsedEscalation = parseEscalation(answer);
+        answer = parsedEscalation.answer;
+
+        const parsedCitation = parseCitation(answer);
+        answer = parsedCitation.answer;
+
+        const structuredCitation = isObject && hasStructuredCitation(raw)
+          ? {
+              kb_relevance: Number(raw.kb_relevance),
+              confidence: Number(raw.confidence),
+              doc_id: String(raw.doc_id)
+            }
+          : null;
+
+        const citation = structuredCitation || parsedCitation.citation;
+        const citationParseFailed = !citation && !structuredCitation;
+        const escalated = Boolean(isObject && raw.escalate) || parsedEscalation.escalated;
+        const escalateReason = String((isObject && raw.escalate_reason) || parsedEscalation.reason || "");
+        const confidence = citation ? Number(citation.confidence) : undefined;
+        const kbRelevance = citation ? Number(citation.kb_relevance) : undefined;
+        const showEngineerCta = (confidence !== undefined && confidence < 70) || numberRegex.test(answer);
+
+        return {
+          id: createMessageId(),
+          role: "bot",
+          content: answer.trim(),
+          created_at: new Date().toISOString(),
+          meta: {
+            kb_relevance: kbRelevance,
+            confidence,
+            doc_id: citation?.doc_id,
+            model: isObject ? raw.model : "",
+            escalated,
+            escalate_reason: escalateReason,
+            citation_parse_failed: citationParseFailed,
+            showEngineerCta
+          }
+        };
+      }
+
+      function hasStructuredCitation(raw) {
+        return raw.kb_relevance !== undefined && raw.confidence !== undefined && raw.doc_id !== undefined;
+      }
+
+      function parseCitation(answer) {
+        const match = answer.match(citationRegex);
+        if (!match) {
+          return { answer, citation: null };
+        }
+        return {
+          answer: answer.replace(citationRegex, "").trim(),
+          citation: {
+            kb_relevance: Number(match[1]),
+            confidence: Number(match[2]),
+            doc_id: match[3].trim()
+          }
+        };
+      }
+
+      function parseEscalation(answer) {
+        const match = answer.match(escalationRegex);
+        if (!match) {
+          return { answer, escalated: false, reason: "" };
+        }
+        return {
+          answer: answer.replace(escalationRegex, "").trim(),
+          escalated: true,
+          reason: match[1].trim()
+        };
+      }
+
+      function finishBotMessage(botMessage) {
+        state.history.push(botMessage);
+        saveHistory();
+        renderMessage(botMessage);
+
+        if (botMessage.meta?.kb_relevance < 50) {
+          setStatus("partial");
+        } else if (!botMessage.meta?.error) {
+          setStatus("default", true);
+        }
+
+        logEvent("bot_response", {
+          session_id: state.sessionId,
+          response_time_ms: botMessage.meta?.response_time_ms,
+          kb_relevance: botMessage.meta?.kb_relevance,
+          confidence: botMessage.meta?.confidence,
+          doc_id: botMessage.meta?.doc_id,
+          model: botMessage.meta?.model,
+          escalated: Boolean(botMessage.meta?.escalated),
+          escalate_reason: botMessage.meta?.escalate_reason || "",
+          citation_parse_failed: Boolean(botMessage.meta?.citation_parse_failed)
+        });
+      }
+
+      function setStatus(type, delayDefault = false) {
+        statusTimers.forEach((timer) => clearTimeout(timer));
+        statusTimers.clear();
+
+        const labels = {
+          default: "🟢 พร้อมตอบ",
+          thinking: "⏳ กำลังคิด...",
+          partial: "⚠️ ข้อมูลส่วนใหญ่จากความรู้ทั่วไป",
+          error: "🔴 ระบบขัดข้อง กรุณาลองใหม่"
+        };
+        elements.statusLine.textContent = labels[type] || labels.default;
+        elements.statusLine.dataset.status = type;
+
+        if (type !== "default" || delayDefault) {
+          const timer = setTimeout(() => {
+            elements.statusLine.textContent = labels.default;
+            elements.statusLine.dataset.status = "default";
+            statusTimers.delete(timer);
+          }, 3000);
+          statusTimers.add(timer);
+        }
+      }
+
+      function updateComposerState() {
+        const capped = state.userMessageCount >= config.SESSION_MAX_QUESTIONS;
+        elements.messageInput.disabled = state.isThinking || capped;
+        elements.sendButton.disabled = state.isThinking || capped;
+        if (capped) {
+          elements.messageInput.placeholder = "ครบจำนวนคำถามต่อ session แล้วครับ";
+        } else if (state.mode === "AWAITING_NAME") {
+          elements.messageInput.placeholder = "พิมพ์ชื่อเล่นครับ";
+        } else {
+          elements.messageInput.placeholder = "พิมพ์คำถามหน้างานครับ";
+        }
+      }
+
+      function updateSessionUi() {
+        elements.sessionPill.textContent = `${Math.min(state.userMessageCount, config.SESSION_MAX_QUESTIONS)}/${config.SESSION_MAX_QUESTIONS}`;
+      }
+
+      function applySessionCap() {
+        elements.capBanner.hidden = false;
+        updateComposerState();
+        updateSessionUi();
+      }
+
+      function handlePaste(event) {
+        const pasted = event.clipboardData?.getData("text") || "";
+        if (pasted.length <= config.INPUT_MAX_LENGTH) return;
+
+        event.preventDefault();
+        const textarea = elements.messageInput;
+        const current = textarea.value;
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const nextValue = `${current.slice(0, start)}${pasted}${current.slice(end)}`;
+        textarea.value = nextValue.slice(0, config.INPUT_MAX_LENGTH);
+        autoGrowInput();
+        showToast(`ตัดข้อความให้เหลือ ${config.INPUT_MAX_LENGTH} ตัวอักษรครับ`);
+      }
+
+      function autoGrowInput() {
+        const input = elements.messageInput;
+        input.style.height = "auto";
+        input.style.height = `${Math.min(input.scrollHeight, 140)}px`;
+      }
+
+      function clearInput() {
+        elements.messageInput.value = "";
+        autoGrowInput();
+      }
+
+      function createMessageId() {
+        return `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+      }
+
+      function scrollToBottom() {
+        requestAnimationFrame(() => {
+          elements.chatPanel.scrollTop = elements.chatPanel.scrollHeight;
+        });
+      }
+
+      function showToast(message) {
+        elements.toast.textContent = message;
+        elements.toast.hidden = false;
+        window.clearTimeout(showToast.timer);
+        showToast.timer = window.setTimeout(() => {
+          elements.toast.hidden = true;
+        }, 2800);
+      }
+
+      function logEvent(eventName, payload) {
+        const eventPayload = {
+          event: eventName,
+          session_id: state.sessionId,
+          student_id: state.studentId,
+          course_id: state.courseId,
+          nickname: state.nickname,
+          timestamp: new Date().toISOString(),
+          ...payload
+        };
+        console.log("[creful-log]", eventPayload);
+      }
+    })();
+  </script>
+</body>
+</html>
