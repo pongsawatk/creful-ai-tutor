@@ -20,6 +20,8 @@ var LOG_HEADERS = [
   'escalated',
   'escalate_reason',
   'citation_parse_failed',
+  'fallback_used',
+  'primary_error',
   'feedback_type'
 ];
 
@@ -244,6 +246,8 @@ function buildLogRow_(payload) {
     escalated: valueOrBlank_(payload.escalated),
     escalate_reason: firstValue_(payload.escalate_reason, payload.escalateReason, ''),
     citation_parse_failed: valueOrBlank_(payload.citation_parse_failed),
+    fallback_used: valueOrBlank_(payload.fallback_used),
+    primary_error: firstValue_(payload.primary_error, payload.primaryError, ''),
     feedback_type: firstValue_(payload.feedback_type, payload.feedbackType, '')
   };
 

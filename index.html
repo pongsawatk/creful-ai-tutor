@@ -58,13 +58,15 @@
       const config = {
         N8N_WEBHOOK_URL: runtimeConfig.N8N_WEBHOOK_URL || "",
         KB_BASE_URL: runtimeConfig.KB_BASE_URL || "",
+        SHEET_WEBHOOK_URL: runtimeConfig.SHEET_WEBHOOK_URL || "",
         SESSION_MAX_QUESTIONS: Number(runtimeConfig.SESSION_MAX_QUESTIONS || 50),
         INPUT_MAX_LENGTH: Number(runtimeConfig.INPUT_MAX_LENGTH || 500)
       };
 
       const citationRegex = /\*\(📚 ข้อมูล: (\d+)% \| 🎯 มั่นใจ: (\d+)% \| 🔗 Ref: ([^)]+)\)\*/;
       const escalationRegex = /^ESCALATE:\s*(.+)$/im;
-      const numberRegex = /(?:\d+(?:[.,]\d+)?\s*(?:%|มม\.?|ซม\.?|เมตร|ม\.|วัน|ชั่วโมง|บาท|ตร\.ม\.|m2|mm|cm|kg|กก\.?)?)/i;
+      const lowKbWarningRegex = /^\s*⚠️[^\n]*ความรู้ทั่วไป[^\n]*\n?/m;
+      const numberRegex = /\d+(?:[.,]\d+)?\s*(?:%|มม\.?|ซม\.?|เมตร|ม\.|MPa|N\/mm²|กก\.?|kg|m2|ตร\.ม\.|mm|cm)/i;
       const statusTimers = new Set();
 
       const storageKeys = {
@@ -277,7 +279,7 @@
             group.appendChild(createEscalationCard(meta.escalate_reason || "ต้องให้ Trainer ตรวจสอบ"));
           }
           if (!meta.system) {
-            group.appendChild(createFeedbackButtons(message.id));
+            group.appendChild(createFeedbackButtons(message));
           }
         }
 
@@ -320,9 +322,10 @@
         return card;
       }
 
-      function createFeedbackButtons(messageId) {
+      function createFeedbackButtons(message) {
         const feedback = document.createElement("div");
         feedback.className = "feedback-row";
+        const meta = message?.meta || {};
         [
           ["understood", "👍 เข้าใจแล้ว"],
           ["unclear", "👎 ยังไม่ชัด"],
@@ -335,7 +338,14 @@
           button.textContent = label;
           button.addEventListener("click", () => {
             button.classList.add("is-selected");
-            logEvent("feedback", { message_id: messageId, feedback_type: type });
+            logEvent("feedback", {
+              message_id: message?.id,
+              feedback_type: type,
+              doc_id: meta.doc_id || "",
+              kb_relevance: meta.kb_relevance,
+              confidence: meta.confidence,
+              model: meta.model || ""
+            });
             showToast("บันทึก feedback แล้วครับ");
           });
           feedback.appendChild(button);
@@ -491,7 +501,7 @@
         }
 
         if (message.includes("low")) {
-          return "ข้อมูลในคู่มือยังครอบคลุมไม่ครบครับ พี่ช่างควรถาม PM ประกอบก่อนใช้จริง\n\n*(📚 ข้อมูล: 42% | 🎯 มั่นใจ: 68% | 🔗 Ref: ความรู้ทั่วไป)*";
+          return "ข้อมูลในคู่มือยังครอบคลุมไม่ครบครับ แนะนำให้ถาม PM ประกอบก่อนใช้จริง\n\n*(📚 ข้อมูล: 42% | 🎯 มั่นใจ: 68% | 🔗 Ref: ความรู้ทั่วไป)*";
         }
 
         if (message.includes("escalate")) {
@@ -517,6 +527,8 @@
 
         const parsedCitation = parseCitation(answer);
         answer = parsedCitation.answer;
+
+        answer = stripLowKbWarning(answer);
 
         const structuredCitation = isObject && hasStructuredCitation(raw)
           ? {
@@ -581,6 +593,10 @@
           escalated: true,
           reason: match[1].trim()
         };
+      }
+
+      function stripLowKbWarning(answer) {
+        return answer.replace(lowKbWarningRegex, "").trim();
       }
 
       function finishBotMessage(botMessage) {
@@ -709,6 +725,20 @@
           ...payload
         };
         console.log("[creful-log]", eventPayload);
+
+        if (eventName === "feedback" && config.SHEET_WEBHOOK_URL) {
+          try {
+            fetch(config.SHEET_WEBHOOK_URL, {
+              method: "POST",
+              mode: "no-cors",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(eventPayload),
+              keepalive: true
+            }).catch((error) => console.warn("[creful-log] sheet post failed", error));
+          } catch (error) {
+            console.warn("[creful-log] sheet post threw", error);
+          }
+        }
       }
     })();
   </script>

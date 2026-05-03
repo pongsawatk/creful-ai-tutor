@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__6a48687d-adfd-4975-a8da-ab13eaa15758__notion-search",
+      "mcp__6a48687d-adfd-4975-a8da-ab13eaa15758__notion-fetch",
+      "Bash(node -e ' *)"
+    ]
+  }
+}

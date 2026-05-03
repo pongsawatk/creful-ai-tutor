@@ -1,0 +1,86 @@
+{
+  "name": "Creful KB Sync",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "creful-kb-sync",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "a07e54dd-5bc3-4908-84cb-be3df87acdda",
+      "name": "Manual Webhook - POST /creful-kb-sync",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        260,
+        300
+      ],
+      "webhookId": "47629db4-013e-4ef9-9f23-c2a98a9c33fc"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const DEFAULT_STATUSES = ['in_review', 'approved', 'published'];\nconst DEFAULT_DATA_SOURCE_ID = 'c52dad9d-1fa0-45af-a23b-68785536a494';\nconst DEFAULT_REPO = 'pongsawatk/creful-ai-tutor';\nconst NOTION_VERSION = '2025-09-03';\nconst MAX_BLOCK_DEPTH = 6;\n\nfunction getVars() {\n  try {\n    if (typeof $vars !== 'undefined') return $vars;\n  } catch (_) {}\n  return {};\n}\n\nfunction firstValue(...values) {\n  return values.find((value) => value !== undefined && value !== null && value !== '');\n}\n\nfunction requiredSecret(name, ...values) {\n  const value = firstValue(...values);\n  if (!value) {\n    throw new Error(\n      `Missing required secret/config: ${name}. Add it as an n8n Variable, or pass it in a test-only webhook header/body.`\n    );\n  }\n  return value;\n}\n\nconst webhookInput = $input.first()?.json || {};\nconst webhookBody = webhookInput.body || webhookInput;\nconst webhookHeaders = webhookInput.headers || {};\nconst vars = getVars();\n\nconst notionToken = requiredSecret(\n  'NOTION_TOKEN',\n  vars.NOTION_TOKEN,\n  webhookHeaders['x-notion-token'],\n  webhookBody.notion_token\n);\nconst githubToken = requiredSecret(\n  'GITHUB_TOKEN',\n  vars.GITHUB_TOKEN,\n  webhookHeaders['x-github-token'],\n  webhookBody.github_token\n);\nconst githubRepo = firstValue(\n  vars.GITHUB_REPO,\n  webhookHeaders['x-github-repo'],\n  webhookBody.github_repo,\n  DEFAULT_REPO\n);\nconst notionDataSourceId = firstValue(\n  vars.NOTION_DATA_SOURCE_ID,\n  webhookHeaders['x-notion-data-source-id'],\n  webhookBody.notion_data_source_id,\n  DEFAULT_DATA_SOURCE_ID\n);\nconst githubBranch = firstValue(\n  vars.GITHUB_BRANCH,\n  webhookHeaders['x-github-branch'],\n  webhookBody.branch,\n  ''\n);\n\nconst statusFilter = Array.isArray(webhookBody.statuses) && webhookBody.statuses.length\n  ? webhookBody.statuses\n  : DEFAULT_STATUSES;\n\nconst commitMessage = `kb sync: Notion KB ${new Date().toISOString()}`;\n\nasync function httpRequest(options) {\n  if (this?.helpers?.httpRequest) {\n    return await this.helpers.httpRequest(options);\n  }\n\n  if (typeof fetch !== 'function') {\n    throw new Error('No HTTP client available in this n8n Code node runtime.');\n  }\n\n  const url = new URL(options.url);\n  if (options.qs) {\n    for (const [key, value] of Object.entries(options.qs)) {\n      if (value !== undefined && value !== null && value !== '') {\n        url.searchParams.set(key, value);\n      }\n    }\n  }\n\n  const response = await fetch(url, {\n    method: options.method || 'GET',\n    headers: options.headers || {},\n    body: options.body ? JSON.stringify(options.body) : undefined\n  });\n\n  const text = await response.text();\n  let body = text;\n  try {\n    body = text ? JSON.parse(text) : null;\n  } catch (_) {}\n\n  if (!response.ok && !options.returnFullResponse) {\n    throw new Error(`HTTP ${response.status}: ${text}`);\n  }\n\n  return options.returnFullResponse\n    ? { statusCode: response.status, headers: Object.fromEntries(response.headers), body }\n    : body;\n}\n\nasync function requestJson(options) {\n  try {\n    return await httpRequest.call(this, {\n      json: true,\n      returnFullResponse: true,\n      ...options,\n      headers: {\n        ...(options.headers || {})\n      }\n    });\n  } catch (error) {\n    const statusCode = error.statusCode || error.httpCode || error.response?.statusCode;\n    const body = error.response?.body || error.cause?.response?.body || error.message;\n    return { statusCode: statusCode || 500, body };\n  }\n}\n\nfunction notionHeaders() {\n  return {\n    Authorization: `Bearer ${notionToken}`,\n    'Notion-Version': NOTION_VERSION,\n    'Content-Type': 'application/json'\n  };\n}\n\nfunction githubHeaders() {\n  return {\n    Authorization: `Bearer ${githubToken}`,\n    Accept: 'application/vnd.github+json',\n    'X-GitHub-Api-Version': '2022-11-28',\n    'Content-Type': 'application/json'\n  };\n}\n\nfunction assertOk(response, label) {\n  if (response.statusCode < 200 || response.statusCode >= 300) {\n    throw new Error(`${label} failed with HTTP ${response.statusCode}: ${JSON.stringify(response.body)}`);\n  }\n  return response.body;\n}\n\nfunction property(page, name) {\n  return page.properties?.[name];\n}\n\nfunction richTextToPlain(parts = []) {\n  return parts.map((part) => part.plain_text || part.text?.content || '').join('').trim();\n}\n\nfunction propertyText(page, name) {\n  const p = property(page, name);\n  if (!p) return '';\n  if (p.type === 'title') return richTextToPlain(p.title || []);\n  if (p.type === 'rich_text') return richTextToPlain(p.rich_text || []);\n  if (p.type === 'select') return p.select?.name || '';\n  if (p.type === 'status') return p.status?.name || '';\n  if (p.type === 'formula') return p.formula?.string || String(p.formula?.number || '');\n  return '';\n}\n\nfunction propertyMulti(page, name) {\n  const p = property(page, name);\n  if (!p) return [];\n  if (p.type === 'multi_select') return (p.multi_select || []).map((x) => x.name).filter(Boolean);\n  if (p.type === 'people') return (p.people || []).map((x) => x.name || x.id).filter(Boolean);\n  return [];\n}\n\nfunction normalizePage(page) {\n  const docId = propertyText(page, 'Doc ID') || page.id;\n  return {\n    page_id: page.id,\n    doc_id: docId,\n    title: docId,\n    status: propertyText(page, 'Status'),\n    module: propertyText(page, 'Module'),\n    type: propertyText(page, 'Type'),\n    authority: propertyText(page, 'Authority'),\n    topic_tags: propertyMulti(page, 'Topic Tags'),\n    reviewer: propertyMulti(page, 'Reviewer'),\n    source_url: page.url || '',\n    updated_at: page.last_edited_time || new Date().toISOString()\n  };\n}\n\nfunction richTextToMarkdown(parts = []) {\n  return parts.map((part) => {\n    const text = part.plain_text || part.text?.content || '';\n    const href = part.href || part.text?.link?.url;\n    let out = text;\n\n    if (part.annotations?.code) out = '`' + out + '`';\n    if (part.annotations?.bold) out = '**' + out + '**';\n    if (part.annotations?.italic) out = '*' + out + '*';\n    if (href) out = `[${out}](${href})`;\n\n    return out;\n  }).join('');\n}\n\nfunction blockToMarkdown(block, depth = 0) {\n  const type = block.type;\n  const data = block[type] || {};\n  const text = richTextToMarkdown(data.rich_text || []);\n  const indent = '  '.repeat(depth);\n  let line = '';\n\n  switch (type) {\n    case 'paragraph':\n      line = text;\n      break;\n    case 'heading_1':\n      line = `# ${text}`;\n      break;\n    case 'heading_2':\n      line = `## ${text}`;\n      break;\n    case 'heading_3':\n      line = `### ${text}`;\n      break;\n    case 'bulleted_list_item':\n      line = `${indent}- ${text}`;\n      break;\n    case 'numbered_list_item':\n      line = `${indent}1. ${text}`;\n      break;\n    case 'to_do':\n      line = `${indent}- [${data.checked ? 'x' : ' '}] ${text}`;\n      break;\n    case 'toggle':\n      line = text ? `${indent}<details><summary>${text}</summary>` : '';\n      break;\n    case 'quote':\n    case 'callout':\n      line = text ? `> ${text}` : '';\n      break;\n    case 'code':\n      line = '```' + (data.language || '') + '\\n' + text + '\\n```';\n      break;\n    case 'divider':\n      line = '---';\n      break;\n    case 'table_row':\n      line = '| ' + (data.cells || []).map((cell) => richTextToMarkdown(cell)).join(' | ') + ' |';\n      break;\n    case 'image':\n      line = `[Image: ${data.caption ? richTextToMarkdown(data.caption) : data.file?.url || data.external?.url || 'Notion image'}]`;\n      break;\n    case 'bookmark':\n    case 'embed':\n    case 'link_preview':\n      line = data.url ? `[${type}: ${data.url}]` : '';\n      break;\n    case 'child_page':\n      line = `## ${data.title || 'Child page'}`;\n      break;\n    default:\n      line = text;\n  }\n\n  const children = (block.children || [])\n    .map((child) => blockToMarkdown(child, depth + 1))\n    .filter(Boolean);\n\n  if (type === 'toggle' && children.length) {\n    return [line, ...children, `${indent}</details>`].filter(Boolean).join('\\n');\n  }\n\n  return [line, ...children].filter(Boolean).join('\\n');\n}\n\nfunction safeFilename(input) {\n  return String(input || 'untitled')\n    .normalize('NFKD')\n    .replace(/[<>:\"/\\\\|?*\\x00-\\x1F]/g, '_')\n    .replace(/\\s+/g, '_')\n    .replace(/_+/g, '_')\n    .replace(/^\\.+/, '')\n    .replace(/\\.+$/, '')\n    .slice(0, 120) || 'untitled';\n}\n\nfunction toBase64(text) {\n  return Buffer.from(text, 'utf8').toString('base64');\n}\n\nfunction stripBase64Whitespace(value) {\n  return String(value || '').replace(/\\s/g, '');\n}\n\nfunction githubContentUrl(path) {\n  return `https://api.github.com/repos/${githubRepo}/contents/${encodeURIComponent(path).replace(/%2F/g, '/')}`;\n}\n\nasync function queryNotionPages() {\n  const pages = [];\n  let cursor;\n\n  do {\n    const body = {\n      page_size: 100,\n      result_type: 'page',\n      filter: {\n        or: statusFilter.map((status) => ({\n          property: 'Status',\n          status: { equals: status }\n        }))\n      },\n      sorts: [\n        {\n          timestamp: 'last_edited_time',\n          direction: 'ascending'\n        }\n      ]\n    };\n\n    if (cursor) body.start_cursor = cursor;\n\n    const response = await requestJson.call(this, {\n      method: 'POST',\n      url: `https://api.notion.com/v1/data_sources/${notionDataSourceId}/query`,\n      headers: notionHeaders(),\n      body\n    });\n\n    const data = assertOk(response, 'Notion data source query');\n    pages.push(...(data.results || []));\n    cursor = data.has_more ? data.next_cursor : null;\n  } while (cursor);\n\n  return pages;\n}\n\nasync function fetchBlockChildren(blockId, depth = 0) {\n  const blocks = [];\n  let cursor;\n\n  do {\n    const qs = { page_size: 100 };\n    if (cursor) qs.start_cursor = cursor;\n\n    const response = await requestJson.call(this, {\n      method: 'GET',\n      url: `https://api.notion.com/v1/blocks/${blockId}/children`,\n      qs,\n      headers: notionHeaders()\n    });\n\n    const data = assertOk(response, `Notion block children ${blockId}`);\n\n    for (const block of data.results || []) {\n      if (block.has_children && depth < MAX_BLOCK_DEPTH) {\n        block.children = await fetchBlockChildren.call(this, block.id, depth + 1);\n      }\n      blocks.push(block);\n    }\n\n    cursor = data.has_more ? data.next_cursor : null;\n  } while (cursor);\n\n  return blocks;\n}\n\nfunction buildFiles(chunks) {\n  const usedNames = new Map();\n\n  const docFiles = chunks.map((chunk) => {\n    const base = safeFilename(chunk.doc_id);\n    const count = usedNames.get(base) || 0;\n    usedNames.set(base, count + 1);\n\n    const filename = count === 0 ? `${base}.json` : `${base}_${count + 1}.json`;\n    const path = `KB/${filename}`;\n    const jsonText = JSON.stringify(chunk, null, 2) + '\\n';\n\n    return {\n      is_index: false,\n      doc_id: chunk.doc_id,\n      path,\n      json_text: jsonText,\n      content_base64: toBase64(jsonText)\n    };\n  });\n\n  const index = {\n    source: 'notion',\n    source_data_source_id: notionDataSourceId,\n    status_filter: statusFilter,\n    production_note: 'Before real rollout, tighten status_filter to published only.',\n    count: chunks.length,\n    updated_at: chunks.map((chunk) => chunk.updated_at).sort().at(-1) || null,\n    docs: docFiles.map((file, index) => {\n      const chunk = chunks[index];\n      return {\n        doc_id: chunk.doc_id,\n        title: chunk.title,\n        status: chunk.status,\n        module: chunk.module,\n        type: chunk.type,\n        authority: chunk.authority,\n        topic_tags: chunk.topic_tags || [],\n        path: file.path,\n        source_url: chunk.source_url,\n        updated_at: chunk.updated_at\n      };\n    })\n  };\n\n  const indexText = JSON.stringify(index, null, 2) + '\\n';\n\n  return [\n    ...docFiles,\n    {\n      is_index: true,\n      doc_id: '_index',\n      path: 'KB/_index.json',\n      json_text: indexText,\n      content_base64: toBase64(indexText)\n    }\n  ];\n}\n\nasync function getExistingGithubFile(path) {\n  const response = await requestJson.call(this, {\n    method: 'GET',\n    url: githubContentUrl(path),\n    qs: githubBranch ? { ref: githubBranch } : undefined,\n    headers: githubHeaders()\n  });\n\n  if (response.statusCode === 404) {\n    return null;\n  }\n\n  return assertOk(response, `GitHub get ${path}`);\n}\n\nasync function putGithubFile(file, existing) {\n  const body = {\n    message: commitMessage,\n    content: file.content_base64\n  };\n\n  if (existing?.sha) body.sha = existing.sha;\n  if (githubBranch) body.branch = githubBranch;\n\n  const response = await requestJson.call(this, {\n    method: 'PUT',\n    url: githubContentUrl(file.path),\n    headers: githubHeaders(),\n    body\n  });\n\n  return assertOk(response, `GitHub put ${file.path}`);\n}\n\nconst notionPages = await queryNotionPages.call(this);\nconst normalizedRows = notionPages\n  .map(normalizePage)\n  .filter((row) => statusFilter.includes(row.status));\n\nconst chunks = [];\n\nfor (const row of normalizedRows) {\n  const blocks = await fetchBlockChildren.call(this, row.page_id);\n  const content = blocks\n    .map((block) => blockToMarkdown(block))\n    .filter(Boolean)\n    .join('\\n\\n')\n    .replace(/\\n{3,}/g, '\\n\\n')\n    .trim();\n\n  chunks.push({\n    doc_id: row.doc_id,\n    title: row.title,\n    status: row.status,\n    module: row.module,\n    type: row.type,\n    authority: row.authority,\n    topic_tags: row.topic_tags || [],\n    source_url: row.source_url,\n    content,\n    updated_at: row.updated_at\n  });\n}\n\nconst files = buildFiles(chunks);\nconst results = [];\n\nfor (const file of files) {\n  const existing = await getExistingGithubFile.call(this, file.path);\n  const existingContent = stripBase64Whitespace(existing?.content);\n  const desiredContent = stripBase64Whitespace(file.content_base64);\n\n  let action = existing ? 'update' : 'create';\n\n  if (existing && existingContent === desiredContent) {\n    action = 'skip';\n  }\n\n  let githubResult = null;\n  if (action !== 'skip') {\n    githubResult = await putGithubFile.call(this, file, existing);\n  }\n\n  results.push({\n    ...file,\n    action,\n    sha: existing?.sha || null,\n    new_sha: githubResult?.content?.sha || existing?.sha || null\n  });\n}\n\nconst docResults = results.filter((file) => !file.is_index);\n\nreturn [\n  {\n    json: {\n      ok: true,\n      synced: docResults.length,\n      created: docResults.filter((file) => file.action === 'create').length,\n      updated: docResults.filter((file) => file.action === 'update').length,\n      skipped: docResults.filter((file) => file.action === 'skip').length,\n      commit_message: commitMessage,\n      index_path: 'KB/_index.json'\n    }\n  }\n];\n"
+      },
+      "id": "03372cb9-9341-4945-916f-fdfbf87bbb57",
+      "name": "Code - Creful KB Sync",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        520,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "a89b447e-be4a-4827-b9e8-d22d436fbe35",
+      "name": "Respond - Sync Summary",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        300
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Manual Webhook - POST /creful-kb-sync": {
+      "main": [
+        [
+          {
+            "node": "Code - Creful KB Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code - Creful KB Sync": {
+      "main": [
+        [
+          {
+            "node": "Respond - Sync Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "3df9aae5-58e0-43d3-bb5d-d28a2d454472",
+  "meta": {
+    "instanceId": ""
+  },
+  "id": "",
+  "tags": []
+}
