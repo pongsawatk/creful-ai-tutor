@@ -355,6 +355,15 @@ button {
   margin: 0;
 }
 
+.bubble .rich-heading {
+  margin-top: 10px;
+  font-weight: 800;
+}
+
+.bubble .rich-heading:first-child {
+  margin-top: 0;
+}
+
 .bubble p + p,
 .bubble p + ul,
 .bubble p + ol,

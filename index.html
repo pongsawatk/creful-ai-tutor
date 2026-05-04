@@ -68,6 +68,7 @@
 
       const citationRegex = /\*\(📚 ข้อมูล: (\d+)% \| 🎯 มั่นใจ: (\d+)% \| 🔗 Ref: ([^)]+)\)\*/;
       const escalationRegex = /^ESCALATE:\s*(.+)$/im;
+      const kbHintRegex = /(?:^|\n)\s*KB_HINT:\s*\n([\s\S]*?)\n\s*END_KB_HINT\s*(?=\n|$)/i;
       const lowKbWarningRegex = /^\s*⚠️[^\n]*ความรู้ทั่วไป[^\n]*\n?/m;
       const numberRegex = /\d+(?:[.,]\d+)?\s*(?:%|มม\.?|ซม\.?|เมตร|ม\.|MPa|N\/mm²|กก\.?|kg|m2|ตร\.ม\.|mm|cm)/i;
       const statusTimers = new Set();
@@ -312,16 +313,16 @@
         bubble.className = "bubble";
         renderRichText(bubble, message.content || "");
 
-        if (meta.escalated && meta.escalate_reason) {
+        if (meta.kb_hint) {
           const extra = document.createElement("div");
           extra.className = "extra-info";
           const intro = document.createElement("p");
           intro.className = "extra-info-intro";
-          intro.textContent = "ℹ️ ครูช่างขอให้ข้อมูลเพิ่มเติมจากฐานความรู้ Creful ว่า";
+          intro.textContent = "ℹ️ จากฐานความรู้ Creful แนะนำเพิ่ม";
           extra.appendChild(intro);
           const body = document.createElement("div");
           body.className = "extra-info-body";
-          renderRichText(body, meta.escalate_reason);
+          renderRichText(body, meta.kb_hint);
           extra.appendChild(body);
           bubble.appendChild(extra);
         }
@@ -347,7 +348,7 @@
       }
 
       function renderRichText(container, text) {
-        const escaped = escapeHtml(text || "").trim();
+        const escaped = escapeHtml(normalizeTextLayout(text || "")).trim();
         if (!escaped) {
           container.textContent = "";
           return;
@@ -358,20 +359,60 @@
       }
 
       function renderBlock(block) {
-        const lines = block.split(/\n/);
-        const isOrderedList = lines.every((line) => /^\s*\d+[.)]\s+/.test(line));
-        const isBulletList = lines.every((line) => /^\s*[-*•]\s+/.test(line));
+        const lines = block.split(/\n/).map((line) => line.trim()).filter(Boolean);
+        let html = "";
+        let paragraphLines = [];
+        let listType = "";
+        let listItems = [];
 
-        if (isOrderedList && lines.length > 1) {
-          const items = lines.map((line) => `<li>${formatInline(line.replace(/^\s*\d+[.)]\s+/, ""))}</li>`).join("");
-          return `<ol>${items}</ol>`;
-        }
-        if (isBulletList && lines.length > 1) {
-          const items = lines.map((line) => `<li>${formatInline(line.replace(/^\s*[-*•]\s+/, ""))}</li>`).join("");
-          return `<ul>${items}</ul>`;
-        }
-        const inline = lines.map(formatInline).join("<br>");
-        return `<p>${inline}</p>`;
+        const flushParagraph = () => {
+          if (!paragraphLines.length) return;
+          const isHeading = paragraphLines.length === 1 && isHeadingLine(paragraphLines[0]);
+          const tag = isHeading ? "p class=\"rich-heading\"" : "p";
+          html += `<${tag}>${paragraphLines.map(formatInline).join("<br>")}</p>`;
+          paragraphLines = [];
+        };
+
+        const flushList = () => {
+          if (!listItems.length) return;
+          const tag = listType === "ol" ? "ol" : "ul";
+          html += `<${tag}>${listItems.map((item) => `<li>${formatInline(item)}</li>`).join("")}</${tag}>`;
+          listType = "";
+          listItems = [];
+        };
+
+        lines.forEach((line) => {
+          const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+          const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
+
+          if (ordered || bullet) {
+            const nextType = ordered ? "ol" : "ul";
+            flushParagraph();
+            if (listType && listType !== nextType) flushList();
+            listType = nextType;
+            listItems.push(ordered ? ordered[1] : bullet[1]);
+            return;
+          }
+
+          flushList();
+          paragraphLines.push(line);
+        });
+
+        flushParagraph();
+        flushList();
+        return html;
+      }
+
+      function normalizeTextLayout(text) {
+        return String(text || "")
+          .replace(/\r\n/g, "\n")
+          .replace(/([^\n])\s+(\d+[.)]\s+)/g, "$1\n$2")
+          .replace(/([^\n])\s+(•\s+)/g, "$1\n$2")
+          .replace(/\n{3,}/g, "\n\n");
+      }
+
+      function isHeadingLine(line) {
+        return line.length <= 48 && /[:：]$/.test(line);
       }
 
       function formatInline(text) {
@@ -602,7 +643,7 @@
 
       function getMockResponse(message) {
         if (message.includes("citation") || message.includes("RFI")) {
-          return "ควรออก RFI ก่อนเริ่มทำงานครับ\n\n*(📚 ข้อมูล: 85% | 🎯 มั่นใจ: 92% | 🔗 Ref: Foreman_M4.1_TriangleCheck)*";
+          return "ควรออก RFI ก่อนเริ่มทำงานครับ\n\nควรทำแบบนี้ครับ:\n- ถ่ายรูปจุดที่ขัดกันไว้เป็นหลักฐาน\n- ระบุแบบหรือเอกสารที่ไม่ตรงกัน\n- ส่งคำถามให้ PM หรือ Designer ยืนยันก่อนเริ่มงาน\n\nKB_HINT:\n- ใช้ RFI เมื่อแบบหรือเอกสารไม่ชัดเจน และต้องรอคำตอบก่อนตัดสินใจหน้างาน\nEND_KB_HINT\n\n*(📚 ข้อมูล: 85% | 🎯 มั่นใจ: 92% | 🔗 Ref: Foreman_M4.1_TriangleCheck)*";
         }
 
         if (message.includes("low")) {
@@ -630,10 +671,14 @@
         const parsedEscalation = parseEscalation(answer);
         answer = parsedEscalation.answer;
 
+        const parsedKbHint = parseKbHint(answer);
+        answer = parsedKbHint.answer;
+
         const parsedCitation = parseCitation(answer);
         answer = parsedCitation.answer;
 
         answer = stripLowKbWarning(answer);
+        const kbHint = normalizeKbHint(isObject ? (raw.kb_hint || raw.kb_extra || parsedKbHint.kb_hint) : parsedKbHint.kb_hint);
 
         const structuredCitation = isObject && hasStructuredCitation(raw)
           ? {
@@ -663,10 +708,33 @@
             model: isObject ? raw.model : "",
             escalated,
             escalate_reason: escalateReason,
+            kb_hint: kbHint,
             citation_parse_failed: citationParseFailed,
             showEngineerCta
           }
         };
+      }
+
+      function parseKbHint(answer) {
+        const match = answer.match(kbHintRegex);
+        if (!match) {
+          return { answer, kb_hint: "" };
+        }
+        return {
+          answer: answer.replace(kbHintRegex, "").trim(),
+          kb_hint: match[1].trim()
+        };
+      }
+
+      function normalizeKbHint(value) {
+        return String(value || "")
+          .replace(/\r\n/g, "\n")
+          .split("\n")
+          .map((line) => line.replace(/^\s*(?:[-*•]|\d+[.)])\s*/, "").trim())
+          .filter(Boolean)
+          .slice(0, 2)
+          .map((line) => `- ${line.length > 180 ? `${line.slice(0, 177).trim()}...` : line}`)
+          .join("\n");
       }
 
       function hasStructuredCitation(raw) {

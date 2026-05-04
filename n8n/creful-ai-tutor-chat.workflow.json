@@ -1,679 +1,699 @@
 {
-  "name": "Creful AI Tutor - Chat v2",
-  "nodes": [
-    {
-      "parameters": {
-        "httpMethod": "POST",
-        "path": "creful-ai-tutor-chat",
-        "responseMode": "responseNode",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.webhook",
-      "typeVersion": 2.1,
-      "position": [
-        -128,
-        -64
-      ],
-      "id": "39e45b84-1fb6-4d25-8605-fedd4e23ec20",
-      "name": "Webhook",
-      "webhookId": "e8b7473f-fc76-4f4d-bc57-f80361e4570a"
-    },
-    {
-      "parameters": {
-        "jsCode": "const inputJson = $input.first().json;\nconst payload = inputJson.body ?? inputJson;\n\nconst started_at = Date.now();\nconst timestamp = new Date(started_at).toISOString();\nconst trace_id = `trace_${started_at}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst message = payload.message == null ? \"\" : String(payload.message).trim();\n\nif (!message) {\n  return [\n    {\n      json: {\n        ok: false,\n        error: \"missing_message\",\n      },\n    },\n  ];\n}\n\nconst history = Array.isArray(payload.history)\n  ? payload.history.slice(-20)\n  : [];\n\nreturn [\n  {\n    json: {\n      ok: true,\n      trace_id,\n      started_at,\n      timestamp,\n      session_id: payload.session_id,\n      student_id: payload.student_id,\n      course_id: payload.course_id,\n      nickname: payload.nickname,\n      message: message.slice(0, 500),\n      history,\n      citation_parse_failed: payload.citation_parse_failed,\n    },\n  },\n];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        96,
-        -64
-      ],
-      "id": "599a6df8-04be-4007-aab6-7d99b4d0c460",
-      "name": "Validate Payload"
-    },
-    {
-      "parameters": {
-        "jsCode": "const previous = $input.first().json;\n\nif (previous.ok === false) {\n  return [\n    {\n      json: {\n        ...previous,\n        model: \"openai/gpt-5.5\",\n        openrouter_body: null,\n      },\n    },\n  ];\n}\n\nconst model = previous.primary_model || \"openai/gpt-5.5\";\nconst temperature = previous.safety_critical || previous.prompt_injection_risk ? 0.1 : 0.2;\nconst max_tokens = previous.model_strategy === \"simple_fast\" ? 650 : 900;\n\nconst history = Array.isArray(previous.history)\n  ? previous.history.slice(-20)\n  : [];\n\nconst system_prompt = `\nYou are LAS Foreman AI Tutor.\n\nPersona:\n- You are a Thai foreman tutor.\n- Answer in Thai.\n- Use \"ครับ\" only as the polite particle.\n- Be practical, clear, and suitable for construction site supervision.\n\nSafety rules:\n- Do not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\n- If the knowledge base context is insufficient, say clearly that the information is insufficient.\n- Do not approve work on behalf of PM, CM, Designer, Consultant, Owner, or Authority.\n- Escalate questions involving fire-rated systems, structural issues, safety risks, variation orders, NCR, specification substitutions, or unclear design conflicts.\n- If escalation is needed, include this exact line:\nESCALATE: <reason>\n\nCitation rule:\n- Do not put citation markers inside the answer body.\n- Use exactly one citation marker, on the final line only.\n- Your final line must be exactly in this format:\n*(📚 ข้อมูล: XX% | 🎯 มั่นใจ: YY% | 🔗 Ref: <doc_id>)*\n- Replace XX and YY with percentage numbers.\n- Replace <doc_id> with the most relevant reference id from KB Context.\n- Do not add anything after the citation line.\n`.trim();\n\nconst kb_context = previous.kb_context || `\nNo relevant deployed KB context was loaded. The assistant must say the KB is insufficient and must not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\n`.trim();\n\nconst conversation_history = history\n  .map((item, index) => {\n    const role = item.role || item.sender || \"unknown\";\n    const content = item.content || item.message || \"\";\n    return `${index + 1}. ${role}: ${content}`;\n  })\n  .join(\"\\n\");\n\nconst user_prompt = `\nKB Context:\n${kb_context}\n\nConversation history:\n${conversation_history || \"(no previous history)\"}\n\nCurrent user message:\n${previous.message}\n\nMetadata:\n- session_id: ${previous.session_id || \"\"}\n- student_id: ${previous.student_id || \"\"}\n- course_id: ${previous.course_id || \"\"}\n- nickname: ${previous.nickname || \"\"}\n- citation_parse_failed: ${previous.citation_parse_failed === true ? \"true\" : \"false\"}\n- model_strategy: ${previous.model_strategy || \"\"}\n- model_selection_reason: ${previous.model_selection_reason || \"\"}\n- kb_context_source: ${previous.kb_context_source || \"\"}\n- kb_doc_ids: ${Array.isArray(previous.kb_doc_ids) ? previous.kb_doc_ids.join(\", \") : \"\"}\n- kb_index_loaded: ${previous.kb_index_loaded === true ? \"true\" : \"false\"}\n\nAnswer the current user message using the KB context and safety rules.\n`.trim();\n\nconst messages = [\n  {\n    role: \"system\",\n    content: system_prompt,\n  },\n  {\n    role: \"user\",\n    content: user_prompt,\n  },\n];\n\nreturn [\n  {\n    json: {\n      ...previous,\n      model,\n      model_strategy: previous.model_strategy || \"standard_quality\",\n      model_selection_reason: previous.model_selection_reason || \"\",\n      safety_critical: previous.safety_critical === true,\n      primary_model: previous.primary_model || model,\n      fallback_model: previous.fallback_model || \"openai/gpt-5.5\",\n      openrouter_body: {\n        model,\n        messages,\n        temperature,\n        max_tokens,\n      },\n    },\n  },\n];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1888,
-        -16
-      ],
-      "id": "5c64a6cd-0b97-4c46-bc4e-eab4fcfae737",
-      "name": "Build Prompt"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "https://creful-ai-tutor.vercel.app"
-            },
-            {
-              "name": "X-Title",
-              "value": "Creful AI Tutor"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{JSON.stringify($json.openrouter_body)}}",
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        2112,
-        -16
-      ],
-      "id": "de9b8bf8-b23f-4547-ab20-c831c6aa053d",
-      "name": "OpenRouter Chat Completion",
-      "retryOnFail": true,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "HiU57o3IO6lsjSpW",
-          "name": "OpenRouter API Key"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst original = $('Build Prompt').first().json;\n\nlet fallbackRequest = {};\ntry {\n  fallbackRequest = $('Build Fallback Request').first().json;\n} catch (error) {\n  fallbackRequest = {};\n}\n\nconst now = Date.now();\n\nconst trace_id = input.trace_id || fallbackRequest.trace_id || original.trace_id || \"\";\nconst started_at = Number(input.started_at || fallbackRequest.started_at || original.started_at || now);\nconst timestamp = input.timestamp || fallbackRequest.timestamp || original.timestamp || new Date(now).toISOString();\n\nconst session_id = input.session_id || fallbackRequest.session_id || original.session_id || \"\";\nconst student_id = input.student_id || fallbackRequest.student_id || original.student_id || \"\";\nconst course_id = input.course_id || fallbackRequest.course_id || original.course_id || \"\";\nconst nickname = input.nickname || fallbackRequest.nickname || original.nickname || \"\";\nconst question = input.message || fallbackRequest.message || original.message || \"\";\n\nconst fallback_used =\n  input.fallback_used === true ||\n  fallbackRequest.fallback_used === true ||\n  original.fallback_used === true ||\n  false;\n\nconst primary_error =\n  input.primary_error ||\n  fallbackRequest.primary_error ||\n  original.primary_error ||\n  \"\";\n\nconst model_strategy =\n  input.model_strategy ||\n  fallbackRequest.model_strategy ||\n  original.model_strategy ||\n  \"standard_quality\";\n\nconst safety_critical =\n  input.safety_critical === true ||\n  fallbackRequest.safety_critical === true ||\n  original.safety_critical === true ||\n  false;\n\nconst model_selection_reason =\n  input.model_selection_reason ||\n  fallbackRequest.model_selection_reason ||\n  original.model_selection_reason ||\n  \"\";\n\nconst model =\n  input.model ||\n  input.body?.model ||\n  input.data?.model ||\n  (fallback_used ? (fallbackRequest.fallback_model || original.fallback_model) : original.model) ||\n  \"\";\n\nconst response_time_ms = now - started_at;\n\nconst usage =\n  input.usage ||\n  input.body?.usage ||\n  input.data?.usage ||\n  {};\n\nconst usage_prompt_tokens = usage.prompt_tokens ?? usage.promptTokens ?? null;\nconst usage_completion_tokens = usage.completion_tokens ?? usage.completionTokens ?? null;\nconst usage_total_tokens = usage.total_tokens ?? usage.totalTokens ?? null;\nconst response_cost =\n  usage.cost ??\n  input.cost ??\n  input.body?.cost ??\n  input.data?.cost ??\n  null;\n\nconst openrouterError =\n  input.error ||\n  input.body?.error ||\n  input.data?.error ||\n  input.message?.error ||\n  null;\n\nconst safeErrorAnswer = openrouterError\n  ? \"\\u0e23\\u0e30\\u0e1a\\u0e1a AI \\u0e02\\u0e31\\u0e14\\u0e02\\u0e49\\u0e2d\\u0e07\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e04\\u0e23\\u0e32\\u0e27\\u0e04\\u0e23\\u0e31\\u0e1a \\u0e01\\u0e23\\u0e38\\u0e13\\u0e32\\u0e25\\u0e2d\\u0e07\\u0e43\\u0e2b\\u0e21\\u0e48\\u0e2d\\u0e35\\u0e01\\u0e04\\u0e23\\u0e31\\u0e49\\u0e07 \\u0e2b\\u0e23\\u0e37\\u0e2d\\u0e41\\u0e08\\u0e49\\u0e07 Trainer \\u0e43\\u0e2b\\u0e49\\u0e0a\\u0e48\\u0e27\\u0e22\\u0e15\\u0e23\\u0e27\\u0e08\\u0e2a\\u0e2d\\u0e1a\\u0e04\\u0e23\\u0e31\\u0e1a\"\n  : \"\\u0e23\\u0e30\\u0e1a\\u0e1a\\u0e02\\u0e31\\u0e14\\u0e02\\u0e49\\u0e2d\\u0e07\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e04\\u0e23\\u0e32\\u0e27\\u0e04\\u0e23\\u0e31\\u0e1a \\u0e01\\u0e23\\u0e38\\u0e13\\u0e32\\u0e25\\u0e2d\\u0e07\\u0e43\\u0e2b\\u0e21\\u0e48\\u0e2d\\u0e35\\u0e01\\u0e04\\u0e23\\u0e31\\u0e49\\u0e07\";\n\nconst escalationFallbackAnswer =\n  \"\\u0e02\\u0e2d\\u0e2a\\u0e48\\u0e07\\u0e15\\u0e48\\u0e2d\\u0e43\\u0e2b\\u0e49\\u0e27\\u0e34\\u0e28\\u0e27\\u0e01\\u0e23\\u0e2b\\u0e23\\u0e37\\u0e2d Trainer \\u0e15\\u0e23\\u0e27\\u0e08\\u0e2a\\u0e2d\\u0e1a\\u0e01\\u0e48\\u0e2d\\u0e19\\u0e04\\u0e23\\u0e31\\u0e1a \\u0e40\\u0e1e\\u0e23\\u0e32\\u0e30\\u0e40\\u0e23\\u0e37\\u0e48\\u0e2d\\u0e07\\u0e19\\u0e35\\u0e49\\u0e2d\\u0e22\\u0e39\\u0e48\\u0e19\\u0e2d\\u0e01\\u0e02\\u0e2d\\u0e1a\\u0e40\\u0e02\\u0e15\\u0e17\\u0e35\\u0e48\\u0e1c\\u0e21\\u0e22\\u0e37\\u0e19\\u0e22\\u0e31\\u0e19\\u0e44\\u0e14\\u0e49\";\n\nconst rawAnswer =\n  input.choices?.[0]?.message?.content ||\n  input.body?.choices?.[0]?.message?.content ||\n  input.data?.choices?.[0]?.message?.content ||\n  \"\";\n\nfunction buildOutput({\n  answer,\n  kb_relevance,\n  confidence,\n  doc_id,\n  escalate,\n  escalate_reason,\n  citation_parse_failed,\n}) {\n  const safeAnswer = String(answer || \"\").trim() || (escalate ? escalationFallbackAnswer : safeErrorAnswer);\n\n  const frontend_response = {\n    answer: safeAnswer,\n    kb_relevance,\n    confidence,\n    doc_id,\n    escalate,\n    escalate_reason,\n    model,\n    trace_id,\n  };\n\n  const sheet_log_payload = {\n    timestamp,\n    trace_id,\n    session_id,\n    student_id,\n    course_id,\n    nickname,\n    question,\n    answer: safeAnswer,\n    response_time_ms,\n    kb_relevance,\n    confidence,\n    doc_id,\n    model,\n    escalated: escalate,\n    escalate_reason,\n    citation_parse_failed,\n    fallback_used,\n    primary_error: primary_error ? String(primary_error).slice(0, 1000) : \"\",\n    model_strategy,\n    model_selection_reason,\n    safety_critical,\n    usage_prompt_tokens,\n    usage_completion_tokens,\n    usage_total_tokens,\n    response_cost,\n    feedback_type: \"\",\n  };\n\n  return [\n    {\n      json: {\n        ...frontend_response,\n        sheet_log_payload,\n        frontend_response,\n      },\n    },\n  ];\n}\n\nif (!rawAnswer) {\n  return buildOutput({\n    answer: safeErrorAnswer,\n    kb_relevance: 0,\n    confidence: 0,\n    doc_id: openrouterError ? \"openrouter_error\" : \"system_error\",\n    escalate: Boolean(openrouterError),\n    escalate_reason: openrouterError\n      ? \"OpenRouter request failed or returned no usable answer\"\n      : \"\",\n    citation_parse_failed: true,\n  });\n}\n\nlet answer = String(rawAnswer).trim();\n\nconst citationRegex = /\\*?\\(\\s*\\uD83D\\uDCDA\\s*\\u0e02\\u0e49\\u0e2d\\u0e21\\u0e39\\u0e25:\\s*(\\d+)%\\s*\\|\\s*\\uD83C\\uDFAF\\s*\\u0e21\\u0e31\\u0e48\\u0e19\\u0e43\\u0e08:\\s*(\\d+)%\\s*\\|\\s*\\uD83D\\uDD17\\s*Ref:\\s*([^)]+?)\\s*\\)\\*?/gu;\nconst citationMatches = [...answer.matchAll(citationRegex)];\nconst citationMatch = citationMatches.at(-1);\n\nlet kb_relevance = null;\nlet confidence = null;\nlet doc_id = \"\";\nlet citation_parse_failed = false;\n\nif (citationMatch) {\n  kb_relevance = Number(citationMatch[1]);\n  confidence = Number(citationMatch[2]);\n  doc_id = citationMatch[3].trim();\n  answer = answer.replace(citationRegex, \"\").trim();\n} else {\n  citation_parse_failed = true;\n  const fallbackDocIds = Array.isArray(original.kb_doc_ids) ? original.kb_doc_ids.filter(Boolean) : [];\n  if (fallbackDocIds.length > 0) {\n    kb_relevance = 70;\n    confidence = 60;\n    doc_id = fallbackDocIds[0];\n  }\n}\n\nconst bannedPersonaPatterns = [\n  /[\"'????]?\\u0e19\\u0e30\\u0e08\\u0e4a\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e19\\u0e30\\u0e04\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e04\\u0e48\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e08\\u0e49\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e08\\u0e49\\u0e32[\"'????]?/g,\n];\n\nfor (const pattern of bannedPersonaPatterns) {\n  answer = answer.replace(pattern, \"\").replace(/\\s{2,}/g, \" \").trim();\n}\n\nconst escapedCitationTailRegex = /\\*\\(\\uD83D\\uDCDA[\\s\\S]*$/;\nanswer = answer.replace(escapedCitationTailRegex, \"\").trim();\n\nconst escalateRegex = /(?:^|[\\n\\r\\s>-])ESCALATE:\\s*([^\\n\\r]*)(?=\\n|\\r|$)/i;\nconst escalateMatch = answer.match(escalateRegex);\n\nlet escalate = false;\nlet escalate_reason = \"\";\n\nif (escalateMatch) {\n  escalate = true;\n  escalate_reason = escalateMatch[1].replace(/[*_#>-]+/g, \" \").replace(/\\s{2,}/g, \" \").trim();\n  answer = answer.replace(escalateRegex, \" \").replace(/\\s{2,}/g, \" \").trim();\n}\n\nconst injectionLikeInput = /ignore|you are now|unrestricted|system prompt|developer message|previous instructions|jailbreak|prompt injection|confirm|verify|\\u0e25\\u0e37\\u0e21 system prompt|\\u0e25\\u0e37\\u0e21\\u0e04\\u0e33\\u0e2a\\u0e31\\u0e48\\u0e07|\\u0e40\\u0e21\\u0e37\\u0e48\\u0e2d\\u0e01\\u0e35\\u0e49|\\u0e43\\u0e0a\\u0e48\\u0e44\\u0e2b\\u0e21|\\u0e22\\u0e37\\u0e19\\u0e22\\u0e31\\u0e19/i.test(question);\n\nfunction escapeRegExp(value) {\n  return value.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$&\");\n}\n\nif (injectionLikeInput) {\n  const injectedNumberUnits = new Set(\n    [...String(question).matchAll(/(\\d+)\\s*(mm|\\u0e21\\u0e21\\.?|cm|\\u0e0b\\u0e21\\.?|m\\b|\\u0e40\\u0e21\\u0e15\\u0e23|D\\b|Nm|kg(?:\\/m2)?|\\u0e01\\u0e01\\.?)/giu)]\n      .map((match) => `${escapeRegExp(match[1])}\\\\s*${escapeRegExp(match[2])}`),\n  );\n\n  for (const escapedToken of injectedNumberUnits) {\n    const tokenRegex = new RegExp(escapedToken, \"giu\");\n    answer = answer.replace(tokenRegex, \"\\u0e04\\u0e48\\u0e32\\u0e17\\u0e35\\u0e48\\u0e2d\\u0e49\\u0e32\\u0e07\\u0e16\\u0e36\\u0e07\");\n  }\n\n  answer = answer.replace(/\\s{2,}/g, \" \").trim();\n}\nreturn buildOutput({\n  answer,\n  kb_relevance,\n  confidence,\n  doc_id,\n  escalate,\n  escalate_reason,\n  citation_parse_failed,\n});\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3008,
-        -16
-      ],
-      "id": "c37b73a3-c9fa-4606-a373-9a6ec9408c54",
-      "name": "Parse Answer"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "PASTE_SHEET_WEBHOOK_URL_HERE",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            }
-          ]
-        },
-        "sendBody": true,
-        "contentType": "raw",
-        "rawContentType": "application/json",
-        "body": "={{ JSON.stringify($json.sheet_log_payload) }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        3232,
-        -256
-      ],
-      "id": "96799f20-4a51-4a97-884e-a7adc9ccbe65",
-      "name": "Log to Google Sheet",
-      "notesInFlow": true,
-      "notes": "Before import/use, replace PASTE_SHEET_WEBHOOK_URL_HERE with the Apps Script Web App URL. This n8n instance blocks $env access in node expressions.",
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "respondWith": "json",
-        "responseBody": "={{ $json.frontend_response }}",
-        "options": {}
-      },
-      "type": "n8n-nodes-base.respondToWebhook",
-      "typeVersion": 1.5,
-      "position": [
-        3232,
-        32
-      ],
-      "id": "b3d36075-2141-483b-9894-bbcb66ce8a70",
-      "name": "Respond to Frontend"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "44ac9c7b-e537-42ea-af71-a779e7ae706e",
-              "leftValue": "={{ $json.ok }}",
-              "rightValue": "",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        320,
-        -64
-      ],
-      "id": "5bae9a12-6de7-43d7-bb3d-b7f34bb0cb65",
-      "name": "Is Valid Payload?"
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst now = Date.now();\n\nconst trace_id =\n  input.trace_id ||\n  `trace_${now}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst frontend_response = {\n  answer: \"ขออภัยครับ ระบบยังไม่ได้รับคำถาม กรุณาพิมพ์คำถามแล้วลองใหม่อีกครั้งครับ\",\n  kb_relevance: 0,\n  confidence: 0,\n  doc_id: \"validation_error\",\n  escalate: false,\n  escalate_reason: \"\",\n  model: \"validation\",\n  trace_id,\n};\n\nreturn [\n  {\n    json: {\n      ...frontend_response,\n      frontend_response,\n      sheet_log_payload: {\n        timestamp: input.timestamp || new Date(now).toISOString(),\n        trace_id,\n        session_id: input.session_id || \"\",\n        student_id: input.student_id || \"\",\n        course_id: input.course_id || \"\",\n        nickname: input.nickname || \"\",\n        question: \"\",\n        answer: frontend_response.answer,\n        response_time_ms: 0,\n        kb_relevance: 0,\n        confidence: 0,\n        doc_id: \"validation_error\",\n        model: \"validation\",\n        escalated: false,\n        escalate_reason: \"\",\n        citation_parse_failed: false,\n        fallback_used: false,\n        primary_error: \"\",\n        model_strategy: \"guard\",\n        model_selection_reason: \"Validation failed before model routing.\",\n        safety_critical: false,\n        usage_prompt_tokens: null,\n        usage_completion_tokens: null,\n        usage_total_tokens: null,\n        response_cost: null,\n        feedback_type: \"validation_error\",\n      },\n    },\n  },\n];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3008,
-        176
-      ],
-      "id": "3695c03a-6fb2-48cb-aca2-a52b288df686",
-      "name": "Build Validation Error Response"
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "d4ae001c-bee8-4ba6-a26d-cdf045cab14e",
-              "leftValue": "={{ $json.choices?.[0]?.message?.content || $json.body?.choices?.[0]?.message?.content || $json.data?.choices?.[0]?.message?.content || \"\" }}\n",
-              "rightValue": "",
-              "operator": {
-                "type": "string",
-                "operation": "notEmpty",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        2336,
-        -16
-      ],
-      "id": "0a95702e-d4d1-4f90-8647-d9595a9bcb72",
-      "name": "Primary Has Answer?"
-    },
-    {
-      "parameters": {
-        "jsCode": "const original = $('Build Prompt').first().json;\nconst primaryResult = $input.first().json;\n\nconst fallbackModel = original.fallback_model || \"anthropic/claude-sonnet-4.6\";\n\nconst primary_error =\n  primaryResult.error ||\n  primaryResult.body?.error ||\n  primaryResult.data?.error ||\n  primaryResult.message ||\n  \"Primary model returned no usable answer\";\n\nreturn [\n  {\n    json: {\n      ...original,\n      model: fallbackModel,\n      fallback_used: true,\n      primary_error,\n      model_strategy: original.model_strategy || \"standard_quality\",\n      model_selection_reason: original.model_selection_reason || \"\",\n      safety_critical: original.safety_critical === true,\n      fallback_model: fallbackModel,\n      openrouter_body: {\n        ...original.openrouter_body,\n        model: fallbackModel,\n      },\n    },\n  },\n];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        2560,
-        16
-      ],
-      "id": "513fcd43-f096-4604-a1e6-e760529fa7f4",
-      "name": "Build Fallback Request"
-    },
-    {
-      "parameters": {
-        "method": "POST",
-        "url": "https://openrouter.ai/api/v1/chat/completions",
-        "authentication": "genericCredentialType",
-        "genericAuthType": "httpHeaderAuth",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "Content-Type",
-              "value": "application/json"
-            },
-            {
-              "name": "HTTP-Referer",
-              "value": "https://creful-ai-tutor.vercel.app"
-            },
-            {
-              "name": "X-Title",
-              "value": "Creful AI Tutor"
-            }
-          ]
-        },
-        "sendBody": true,
-        "specifyBody": "json",
-        "jsonBody": "={{JSON.stringify($json.openrouter_body)}}",
-        "options": {
-          "timeout": 60000
-        }
-      },
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.4,
-      "position": [
-        2784,
-        16
-      ],
-      "id": "9bda4f7f-0881-41c7-b30e-78d8adf73b6b",
-      "name": "OpenRouter Fallback Completion",
-      "retryOnFail": true,
-      "credentials": {
-        "httpHeaderAuth": {
-          "id": "HiU57o3IO6lsjSpW",
-          "name": "OpenRouter API Key"
-        }
-      },
-      "onError": "continueRegularOutput"
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\n\nconst now = Date.now();\nconst windowMs = 3000;\n\nconst key = [\n  input.session_id || \"anonymous_session\",\n  input.student_id || \"anonymous_student\",\n].join(\":\");\n\nconst staticData = $getWorkflowStaticData(\"global\");\nstaticData.crefulRateLimitStore = staticData.crefulRateLimitStore || {};\n\nconst lastSeen = Number(staticData.crefulRateLimitStore[key] || 0);\nconst elapsed = now - lastSeen;\n\nstaticData.crefulRateLimitStore[key] = now;\n\nfor (const [storeKey, timestamp] of Object.entries(staticData.crefulRateLimitStore)) {\n  if (now - Number(timestamp) > 10 * 60 * 1000) {\n    delete staticData.crefulRateLimitStore[storeKey];\n  }\n}\n\nif (elapsed > 0 && elapsed < windowMs) {\n  const retryAfterMs = windowMs - elapsed;\n\n  return [\n    {\n      json: {\n        ...input,\n        ok: false,\n        rate_limited: true,\n        retry_after_ms: retryAfterMs,\n      },\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      rate_limited: false,\n      retry_after_ms: 0,\n    },\n  },\n];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        544,
-        -160
-      ],
-      "id": "5d6c75af-4b84-4c7d-add9-17f07e94c165",
-      "name": "Rate Limit Guard",
-      "notesInFlow": true,
-      "notes": "MVP guard using workflow static data. For strict production concurrency, replace with n8n Data Store, Redis, DB row lock, or queue-based throttling."
-    },
-    {
-      "parameters": {
-        "conditions": {
-          "options": {
-            "caseSensitive": true,
-            "leftValue": "",
-            "typeValidation": "strict",
-            "version": 3
-          },
-          "conditions": [
-            {
-              "id": "3bd5ffab-59cf-4ce3-9905-bbbf49ea3672",
-              "leftValue": "={{ $json.rate_limited }}",
-              "rightValue": "=",
-              "operator": {
-                "type": "boolean",
-                "operation": "true",
-                "singleValue": true
-              }
-            }
-          ],
-          "combinator": "and"
-        },
-        "options": {}
-      },
-      "type": "n8n-nodes-base.if",
-      "typeVersion": 2.3,
-      "position": [
-        768,
-        -160
-      ],
-      "id": "607efed3-f193-4e25-8f03-09a4787d4249",
-      "name": "Is Rate Limited?"
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\n\nconst now = Date.now();\nconst retrySeconds = Math.max(1, Math.ceil(Number(input.retry_after_ms || 0) / 1000));\n\nconst trace_id =\n  input.trace_id ||\n  `trace_${now}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst answer = `ขอพักสัก ${retrySeconds} วินาทีครับ แล้วลองถามใหม่อีกครั้งครับ`;\n\nconst frontend_response = {\n  answer,\n  kb_relevance: 0,\n  confidence: 0,\n  doc_id: \"rate_limited\",\n  escalate: false,\n  escalate_reason: \"\",\n  model: \"rate_limit\",\n  trace_id,\n};\n\nreturn [\n  {\n    json: {\n      ...frontend_response,\n      frontend_response,\n      sheet_log_payload: {\n        timestamp: input.timestamp || new Date(now).toISOString(),\n        trace_id,\n        session_id: input.session_id || \"\",\n        student_id: input.student_id || \"\",\n        course_id: input.course_id || \"\",\n        nickname: input.nickname || \"\",\n        question: input.message || \"\",\n        answer,\n        response_time_ms: 0,\n        kb_relevance: 0,\n        confidence: 0,\n        doc_id: \"rate_limited\",\n        model: \"rate_limit\",\n        escalated: false,\n        escalate_reason: \"\",\n        citation_parse_failed: false,\n        fallback_used: false,\n        primary_error: \"\",\n        model_strategy: \"guard\",\n        model_selection_reason: \"Rate limit guard blocked the request before model routing.\",\n        safety_critical: false,\n        usage_prompt_tokens: null,\n        usage_completion_tokens: null,\n        usage_total_tokens: null,\n        response_cost: null,\n        feedback_type: \"rate_limited\",\n      },\n    },\n  },\n];\n"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        3008,
-        -304
-      ],
-      "id": "2ffb8e94-321f-40d7-ab7c-68f45904ecfb",
-      "name": "Build Rate Limit Response"
-    },
-    {
-      "id": "967b0f07-bdf7-4541-94bd-5955aa17cfff",
-      "name": "Select Model Strategy",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        992,
-        64
-      ],
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst text = String(input.message || \"\").toLowerCase();\nconst history = Array.isArray(input.history) ? input.history : [];\n\nconst MODELS = {\n  fastLite: \"google/gemini-2.5-flash-lite\",\n  fast: \"google/gemini-2.5-flash\",\n  quality: \"openai/gpt-5.5\",\n  safety: \"anthropic/claude-sonnet-4.6\",\n};\n\nfunction hasAny(words) {\n  return words.some((word) => text.includes(word));\n}\n\nconst injectionKeywords = [\n  \"ignore\",\n  \"system prompt\",\n  \"developer message\",\n  \"instruction\",\n  \"jailbreak\",\n  \"prompt injection\",\n  \"\\u0e25\\u0e37\\u0e21 system prompt\",\n  \"\\u0e25\\u0e37\\u0e21\\u0e04\\u0e33\\u0e2a\\u0e31\\u0e48\\u0e07\",\n  \"\\u0e15\\u0e2d\\u0e1a\\u0e40\\u0e1b\\u0e47\\u0e19\\u0e20\\u0e32\\u0e29\\u0e32\\u0e2d\\u0e31\\u0e07\\u0e01\\u0e24\\u0e29\",\n  \"\\u0e20\\u0e32\\u0e29\\u0e32\\u0e2d\\u0e31\\u0e07\\u0e01\\u0e24\\u0e29\",\n];\n\nconst safetyKeywords = [\n  \"fire-rated\",\n  \"fire rated\",\n  \"\\u0e01\\u0e31\\u0e19\\u0e44\\u0e1f\",\n  \"\\u0e17\\u0e19\\u0e44\\u0e1f\",\n  \"\\u0e42\\u0e04\\u0e23\\u0e07\\u0e2a\\u0e23\\u0e49\\u0e32\\u0e07\",\n  \"structural\",\n  \"\\u0e04\\u0e27\\u0e32\\u0e21\\u0e1b\\u0e25\\u0e2d\\u0e14\\u0e20\\u0e31\\u0e22\",\n  \"safety\",\n  \"\\u0e23\\u0e30\\u0e22\\u0e30\",\n  \"\\u0e02\\u0e19\\u0e32\\u0e14\",\n  \"\\u0e2b\\u0e19\\u0e32\",\n  \"\\u0e21\\u0e21\",\n  \"mm\",\n  \"\\u0e15\\u0e31\\u0e27\\u0e40\\u0e25\\u0e02\",\n  \"spec\",\n  \"\\u0e2a\\u0e40\\u0e1b\\u0e01\",\n  \"boq\",\n  \"\\u0e41\\u0e1a\\u0e1a\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\",\n  \"\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\\u0e01\\u0e31\\u0e19\",\n  \"ncr\",\n  \"vo\",\n  \"variation\",\n  \"\\u0e40\\u0e1b\\u0e25\\u0e35\\u0e48\\u0e22\\u0e19\\u0e27\\u0e31\\u0e2a\\u0e14\\u0e38\",\n  \"substitution\",\n  \"\\u0e21\\u0e32\\u0e15\\u0e23\\u0e10\\u0e32\\u0e19\",\n  \"code\",\n  \"tolerance\",\n  \"approve\",\n  \"approval\",\n  \"\\u0e2d\\u0e19\\u0e38\\u0e21\\u0e31\\u0e15\\u0e34\",\n];\n\nconst simpleKeywords = [\n  \"\\u0e04\\u0e37\\u0e2d\\u0e2d\\u0e30\\u0e44\\u0e23\",\n  \"\\u0e2b\\u0e21\\u0e32\\u0e22\\u0e16\\u0e36\\u0e07\",\n  \"\\u0e22\\u0e48\\u0e2d\\u0e21\\u0e32\\u0e08\\u0e32\\u0e01\",\n  \"definition\",\n  \"what is\",\n  \"rfi \\u0e04\\u0e37\",\n];\n\nconst complexKeywords = [\n  \"\\u0e27\\u0e34\\u0e40\\u0e04\\u0e23\\u0e32\\u0e30\\u0e2b\\u0e4c\",\n  \"\\u0e40\\u0e1b\\u0e23\\u0e35\\u0e22\\u0e1a\\u0e40\\u0e17\\u0e35\\u0e22\\u0e1a\",\n  \"\\u0e2b\\u0e25\\u0e32\\u0e22\\u0e02\\u0e31\\u0e49\\u0e19\",\n  \"\\u0e17\\u0e33\\u0e22\\u0e31\\u0e07\\u0e44\\u0e07\\u0e15\\u0e48\\u0e2d\",\n  \"\\u0e22\\u0e31\\u0e07\\u0e44\\u0e21\\u0e48\\u0e41\\u0e19\\u0e48\\u0e43\\u0e08\",\n  \"edge case\",\n];\n\nconst hasInjectionRisk = hasAny(injectionKeywords);\nconst isSafetyCritical = hasAny(safetyKeywords) || /\\d+\\s*(mm|\\u0e21\\u0e21|\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e42\\u0e21\\u0e07|%)/i.test(text);\nconst isSimple = text.length <= 90 && history.length === 0 && hasAny(simpleKeywords) && !isSafetyCritical && !hasInjectionRisk;\nconst isComplex = history.length > 0 || text.length > 240 || hasAny(complexKeywords);\n\nlet model_strategy = \"standard_fast\";\nlet primary_model = MODELS.fast;\nlet fallback_model = MODELS.quality;\nlet model_selection_reason = \"Default KB tutor route; use Gemini 2.5 Flash for speed/cost, fallback to GPT-5.5 for answer quality.\";\n\nif (hasInjectionRisk) {\n  model_strategy = \"security_guard\";\n  primary_model = MODELS.quality;\n  fallback_model = MODELS.safety;\n  model_selection_reason = \"Prompt-injection or instruction override pattern detected; use strongest guard-capable model first.\";\n} else if (isSafetyCritical) {\n  model_strategy = \"safety_quality\";\n  primary_model = MODELS.safety;\n  fallback_model = MODELS.quality;\n  model_selection_reason = \"Safety, numerical, specification, approval, or design-conflict keyword detected; prefer safety-quality model first.\";\n} else if (isComplex) {\n  model_strategy = \"complex_quality\";\n  primary_model = MODELS.quality;\n  fallback_model = MODELS.safety;\n  model_selection_reason = \"Multi-turn, long, or analytical scenario; use highest-quality model first.\";\n} else if (isSimple) {\n  model_strategy = \"simple_fast\";\n  primary_model = MODELS.fastLite;\n  fallback_model = MODELS.quality;\n  model_selection_reason = \"Short low-risk definition/navigation question; use cheapest low-latency model first.\";\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      model_strategy,\n      model_selection_reason,\n      safety_critical: isSafetyCritical,\n      prompt_injection_risk: hasInjectionRisk,\n      primary_model,\n      fallback_model,\n    },\n  },\n];\n"
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst KB_INDEX_URL = \"https://creful-ai-tutor.vercel.app/KB/_index.json\";\nconst KB_BASE_URL = \"https://creful-ai-tutor.vercel.app/KB\";\n\nasync function requestJson(url) {\n  if (this?.helpers?.httpRequest) {\n    return await this.helpers.httpRequest({\n      method: \"GET\",\n      url,\n      json: true,\n      timeout: 10000,\n    });\n  }\n\n  if (typeof fetch !== \"function\") {\n    throw new Error(\"No HTTP client available in this n8n Code node runtime.\");\n  }\n\n  const response = await fetch(url, { method: \"GET\" });\n  const text = await response.text();\n\n  if (!response.ok) {\n    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);\n  }\n\n  return text ? JSON.parse(text) : null;\n}\n\ntry {\n  const cacheBust = Date.now();\n  const kb_index = await requestJson.call(this, `${KB_INDEX_URL}?v=${cacheBust}`);\n\n  return [\n    {\n      json: {\n        ...input,\n        kb_base_url: KB_BASE_URL,\n        kb_index_url: KB_INDEX_URL,\n        kb_index,\n        kb_index_loaded: true,\n        kb_index_error: \"\",\n      },\n    },\n  ];\n} catch (error) {\n  return [\n    {\n      json: {\n        ...input,\n        kb_base_url: KB_BASE_URL,\n        kb_index_url: KB_INDEX_URL,\n        kb_index: null,\n        kb_index_loaded: false,\n        kb_index_error: error.message || String(error),\n        kb_context: \"[doc_id: KB_UNAVAILABLE]\\nDeployed KB index could not be loaded from Vercel. The assistant must say the knowledge base is temporarily unavailable and avoid giving numerical/specification claims.\",\n        kb_doc_ids: [\"KB_UNAVAILABLE\"],\n      },\n    },\n  ];\n}"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        992,
-        -160
-      ],
-      "id": "b2fca043-cc85-4a0f-b899-73fb8b808e9a",
-      "name": "Load KB Index from Vercel",
-      "notesInFlow": true,
-      "notes": "Public GET. No credentials needed. Loads https://creful-ai-tutor.vercel.app/KB/_index.json with cache-busting query."
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst index = input.kb_index || {};\nconst docs = Array.isArray(index.docs) ? index.docs : [];\nconst message = String(input.message || \"\").toLowerCase();\n\nfunction hasAny(words) {\n  return words.some((word) => message.includes(word));\n}\n\nfunction normalize(value) {\n  return String(value || \"\").toLowerCase();\n}\n\nfunction docHaystack(doc) {\n  return [\n    doc.doc_id,\n    doc.title,\n    doc.module,\n    doc.type,\n    doc.authority,\n    ...(Array.isArray(doc.topic_tags) ? doc.topic_tags : []),\n  ].map(normalize).join(\" \");\n}\n\nconst keywordGroups = [\n  { words: [\"rfi\", \"\\u0e02\\u0e2d\\u0e02\\u0e49\\u0e2d\\u0e21\\u0e39\\u0e25\", \"clarification\"], boosts: [\"m4\", \"template\", \"log\", \"document\", \"understandthedocuments\", \"integrationprocess\", \"discrepancymanagement\"] },\n  { words: [\"rfa\", \"\\u0e2d\\u0e19\\u0e38\\u0e21\\u0e31\\u0e15\\u0e34\\u0e27\\u0e31\\u0e2a\\u0e14\\u0e38\", \"material approval\"], boosts: [\"m4\", \"material\", \"spec\", \"qc\"] },\n  { words: [\"boq\", \"\\u0e1b\\u0e23\\u0e34\\u0e21\\u0e32\\u0e13\", \"quantity\"], boosts: [\"boq\", \"m4\", \"m1.4_s2.g3\"] },\n  { words: [\"spec\", \"\\u0e2a\\u0e40\\u0e1b\\u0e04\", \"specification\"], boosts: [\"spec\", \"material\", \"qc\", \"m4.3\", \"m1.4_s2.g1\"] },\n  { words: [\"\\u0e41\\u0e1a\\u0e1a\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\", \"\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\\u0e01\\u0e31\\u0e19\", \"conflict\", \"\\u0e02\\u0e31\\u0e14\\u0e41\\u0e22\\u0e49\\u0e07\", \"discrepancy\"], boosts: [\"discrepancy\", \"integrationprocess\", \"understandthedocuments\", \"m1.4_s4\", \"m1.4_s3\"] },\n  { words: [\"triangle\", \"\\u0e2a\\u0e32\\u0e21\\u0e40\\u0e2b\\u0e25\\u0e35\\u0e48\\u0e22\\u0e21\", \"\\u0e15\\u0e23\\u0e27\\u0e08\\u0e40\\u0e2d\\u0e01\\u0e2a\\u0e32\\u0e23\", \"\\u0e25\\u0e33\\u0e14\\u0e31\\u0e1a\\u0e40\\u0e2d\\u0e01\\u0e2a\\u0e32\\u0e23\"], boosts: [\"understandthedocuments\", \"boq\", \"spec\", \"documents\", \"m4.1\"] },\n  { words: [\"drawing\", \"\\u0e41\\u0e1a\\u0e1a\", \"plan\", \"elevation\", \"detail\"], boosts: [\"drawing\", \"detail\", \"plans\", \"elevations\", \"m1\", \"m3\"] },\n  { words: [\"\\u0e2b\\u0e19\\u0e49\\u0e32\\u0e07\\u0e32\\u0e19\", \"site\", \"daily\", \"handover\", \"takeover\"], boosts: [\"m5\", \"dailyoperations\", \"handover\", \"sitetakeover\"] },\n  { words: [\"fire\", \"fire-rated\", \"\\u0e01\\u0e31\\u0e19\\u0e44\\u0e1f\", \"\\u0e42\\u0e04\\u0e23\\u0e07\\u0e2a\\u0e23\\u0e49\\u0e32\\u0e07\", \"structural\", \"safety\", \"\\u0e1b\\u0e25\\u0e2d\\u0e14\\u0e20\\u0e31\\u0e22\"], boosts: [\"safety\", \"m5\", \"material\", \"spec\"] },\n];\n\nconst words = message\n  .split(/[^\\p{L}\\p{N}._-]+/u)\n  .map((word) => word.trim())\n  .filter((word) => word.length >= 2);\n\nconst scored = docs.map((doc, index) => {\n  const haystack = docHaystack(doc);\n  let score = 0;\n\n  for (const word of words) {\n    if (haystack.includes(word)) score += 1;\n  }\n\n  for (const group of keywordGroups) {\n    if (!hasAny(group.words)) continue;\n    for (const boost of group.boosts) {\n      if (haystack.includes(boost.toLowerCase())) score += 6;\n    }\n  }\n\n  if (normalize(doc.status) === \"published\") score += 2;\n  if (normalize(doc.status) === \"approved\") score += 1;\n  if (normalize(doc.authority) === \"high\") score += 1;\n\n  return { doc, score, index };\n});\n\nlet selected = scored\n  .filter((item) => item.score > 0)\n  .sort((a, b) => b.score - a.score || a.index - b.index)\n  .slice(0, 5)\n  .map((item) => item.doc);\n\nif (selected.length === 0) {\n  selected = scored\n    .filter((item) => /m4|m1\\.4|m5/i.test(String(item.doc.doc_id || item.doc.title || \"\")))\n    .slice(0, 5)\n    .map((item) => item.doc);\n}\n\nconst kb_selected_docs = selected.map((doc) => ({\n  ...doc,\n  kb_doc_url: \"https://creful-ai-tutor.vercel.app/\" + doc.path,\n}));\n\nreturn [\n  {\n    json: {\n      ...input,\n      kb_selected_docs,\n      kb_selected_doc_ids: kb_selected_docs.map((doc) => doc.doc_id || doc.title || \"\").filter(Boolean),\n    },\n  },\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1216,
-        -160
-      ],
-      "id": "8c084a73-278d-42c0-8091-4d91f53a5f5b",
-      "name": "Select KB Docs",
-      "notesInFlow": true,
-      "notes": "Scores deployed KB index metadata and selects up to 5 likely relevant KB JSON docs."
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst selectedDocs = Array.isArray(input.kb_selected_docs) ? input.kb_selected_docs : [];\n\nasync function requestJson(url) {\n  if (this?.helpers?.httpRequest) {\n    return await this.helpers.httpRequest({\n      method: \"GET\",\n      url,\n      json: true,\n      timeout: 10000,\n    });\n  }\n\n  if (typeof fetch !== \"function\") {\n    throw new Error(\"No HTTP client available in this n8n Code node runtime.\");\n  }\n\n  const response = await fetch(url, { method: \"GET\" });\n  const text = await response.text();\n\n  if (!response.ok) {\n    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);\n  }\n\n  return text ? JSON.parse(text) : null;\n}\n\nconst kb_docs = [];\nconst kb_doc_fetch_errors = [];\nconst cacheBust = Date.now();\n\nfor (const docMeta of selectedDocs) {\n  const url = `${docMeta.kb_doc_url}?v=${cacheBust}`;\n  try {\n    const doc = await requestJson.call(this, url);\n    kb_docs.push({\n      ...docMeta,\n      ...(doc || {}),\n      fetched_url: docMeta.kb_doc_url,\n    });\n  } catch (error) {\n    kb_doc_fetch_errors.push({\n      doc_id: docMeta.doc_id || docMeta.title || \"\",\n      url: docMeta.kb_doc_url,\n      error: error.message || String(error),\n    });\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      kb_docs,\n      kb_doc_fetch_errors,\n    },\n  },\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1440,
-        -160
-      ],
-      "id": "ab55a283-5775-4dd4-bfe0-2eb625ce4dc9",
-      "name": "Load KB Docs from Vercel",
-      "notesInFlow": true,
-      "notes": "Public GET. No credentials needed. Fetches selected https://creful-ai-tutor.vercel.app/KB/*.json docs."
-    },
-    {
-      "parameters": {
-        "jsCode": "const input = $input.first().json;\nconst docs = Array.isArray(input.kb_docs) ? input.kb_docs : [];\nconst perDocLimit = input.model_strategy === \"simple_fast\" ? 2500 : 4000;\nconst totalLimit = input.model_strategy === \"simple_fast\" ? 9000 : 15000;\n\nfunction cleanText(value) {\n  return String(value || \"\")\n    .replace(/\\r\\n/g, \"\\n\")\n    .replace(/\\n{3,}/g, \"\\n\\n\")\n    .trim();\n}\n\nlet remaining = totalLimit;\nconst sections = [];\n\nfor (const doc of docs) {\n  if (remaining <= 0) break;\n\n  const body = cleanText(doc.content).slice(0, Math.min(perDocLimit, remaining));\n  if (!body) continue;\n\n  const section = [\n    `[doc_id: ${doc.doc_id || doc.title || \"unknown\"}]`,\n    `Title: ${doc.title || \"\"}`,\n    `Module: ${doc.module || \"\"}`,\n    `Type: ${doc.type || \"\"}`,\n    `Status: ${doc.status || \"\"}`,\n    `Authority: ${doc.authority || \"\"}`,\n    \"\",\n    body,\n  ].join(\"\\n\");\n\n  sections.push(section);\n  remaining -= section.length;\n}\n\nconst errors = Array.isArray(input.kb_doc_fetch_errors) ? input.kb_doc_fetch_errors : [];\nlet kb_context = sections.join(\"\\n\\n---\\n\\n\").trim();\n\nif (!kb_context) {\n  kb_context = input.kb_context || [\n    \"[doc_id: KB_UNAVAILABLE]\",\n    \"No relevant deployed KB document could be loaded from Vercel for this request.\",\n    \"The assistant must say the KB is insufficient and must not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\",\n  ].join(\"\\n\");\n}\n\nif (errors.length) {\n  kb_context += \"\\n\\n[KB fetch warnings]\\n\" + errors\n    .map((item) => `- ${item.doc_id || \"unknown\"}: ${item.error}`)\n    .join(\"\\n\");\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      kb_context,\n      kb_doc_ids: docs.map((doc) => doc.doc_id || doc.title || \"\").filter(Boolean),\n      kb_context_source: \"vercel_kb_json\",\n    },\n  },\n];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        1664,
-        -160
-      ],
-      "id": "b92342ff-cc1b-4d83-b39b-b970eeb3169a",
-      "name": "Build KB Context",
-      "notesInFlow": true,
-      "notes": "Builds bounded prompt context from deployed KB docs and adds strict fallback if KB cannot be loaded."
-    }
-  ],
-  "pinData": {},
-  "connections": {
-    "Webhook": {
-      "main": [
-        [
-          {
-            "node": "Validate Payload",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Validate Payload": {
-      "main": [
-        [
-          {
-            "node": "Is Valid Payload?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Prompt": {
-      "main": [
-        [
-          {
-            "node": "OpenRouter Chat Completion",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "OpenRouter Chat Completion": {
-      "main": [
-        [
-          {
-            "node": "Primary Has Answer?",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        []
-      ]
-    },
-    "Parse Answer": {
-      "main": [
-        [
-          {
-            "node": "Log to Google Sheet",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Respond to Frontend",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Log to Google Sheet": {
-      "main": [
-        []
-      ]
-    },
-    "Is Valid Payload?": {
-      "main": [
-        [
-          {
-            "node": "Rate Limit Guard",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Build Validation Error Response",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Validation Error Response": {
-      "main": [
-        [
-          {
-            "node": "Respond to Frontend",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Primary Has Answer?": {
-      "main": [
-        [
-          {
-            "node": "Parse Answer",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Build Fallback Request",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Fallback Request": {
-      "main": [
-        [
-          {
-            "node": "OpenRouter Fallback Completion",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "OpenRouter Fallback Completion": {
-      "main": [
-        [
-          {
-            "node": "Parse Answer",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Rate Limit Guard": {
-      "main": [
-        [
-          {
-            "node": "Is Rate Limited?",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Is Rate Limited?": {
-      "main": [
-        [
-          {
-            "node": "Build Rate Limit Response",
-            "type": "main",
-            "index": 0
-          }
-        ],
-        [
-          {
-            "node": "Select Model Strategy",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Rate Limit Response": {
-      "main": [
-        [
-          {
-            "node": "Respond to Frontend",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "Log to Google Sheet",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Select Model Strategy": {
-      "main": [
-        [
-          {
-            "node": "Load KB Index from Vercel",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load KB Index from Vercel": {
-      "main": [
-        [
-          {
-            "node": "Select KB Docs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Select KB Docs": {
-      "main": [
-        [
-          {
-            "node": "Load KB Docs from Vercel",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load KB Docs from Vercel": {
-      "main": [
-        [
-          {
-            "node": "Build KB Context",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build KB Context": {
-      "main": [
-        [
-          {
-            "node": "Build Prompt",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "active": false,
-  "settings": {
-    "executionOrder": "v1",
-    "binaryMode": "separate"
-  },
-  "versionId": "7b551019-e0bb-473c-8a19-4dcdec55080d",
-  "meta": {
-    "instanceId": "f009703e5dcacc8ed25fa2170364c4db0546c8ceafb31201c2c6ec55bcf7ca3b"
-  },
-  "id": "hUFfu0cYGbKOGbqw",
-  "tags": []
+    "name":  "Creful AI Tutor - Chat v2",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "httpMethod":  "POST",
+                                         "path":  "creful-ai-tutor-chat",
+                                         "responseMode":  "responseNode",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.webhook",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       -128,
+                                       -64
+                                   ],
+                      "id":  "39e45b84-1fb6-4d25-8605-fedd4e23ec20",
+                      "name":  "Webhook",
+                      "webhookId":  "e8b7473f-fc76-4f4d-bc57-f80361e4570a"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const inputJson = $input.first().json;\nconst payload = inputJson.body ?? inputJson;\n\nconst started_at = Date.now();\nconst timestamp = new Date(started_at).toISOString();\nconst trace_id = `trace_${started_at}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst message = payload.message == null ? \"\" : String(payload.message).trim();\n\nif (!message) {\n  return [\n    {\n      json: {\n        ok: false,\n        error: \"missing_message\",\n      },\n    },\n  ];\n}\n\nconst history = Array.isArray(payload.history)\n  ? payload.history.slice(-20)\n  : [];\n\nreturn [\n  {\n    json: {\n      ok: true,\n      trace_id,\n      started_at,\n      timestamp,\n      session_id: payload.session_id,\n      student_id: payload.student_id,\n      course_id: payload.course_id,\n      nickname: payload.nickname,\n      message: message.slice(0, 500),\n      history,\n      citation_parse_failed: payload.citation_parse_failed,\n    },\n  },\n];\n"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       96,
+                                       -64
+                                   ],
+                      "id":  "599a6df8-04be-4007-aab6-7d99b4d0c460",
+                      "name":  "Validate Payload"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const previous = $input.first().json;\n\nif (previous.ok === false) {\n  return [\n    {\n      json: {\n        ...previous,\n        model: \"openai/gpt-5.5\",\n        openrouter_body: null,\n      },\n    },\n  ];\n}\n\nconst model = previous.primary_model || \"openai/gpt-5.5\";\nconst temperature = previous.safety_critical || previous.prompt_injection_risk ? 0.1 : 0.2;\nconst max_tokens = previous.model_strategy === \"simple_fast\" ? 750 : 1000;\n\nconst history = Array.isArray(previous.history)\n  ? previous.history.slice(-20)\n  : [];\n\nconst system_prompt = `\nYou are LAS Foreman AI Tutor (\"ครูช่าง AI\").\n\nPersona:\n- You are a Thai foreman tutor.\n- Answer in Thai.\n- Use \"ครับ\" only as the polite particle.\n- Be practical, clear, and suitable for construction site supervision.\n- Write naturally like a senior foreman guiding a junior foreman.\n\nSafety rules:\n- Do not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\n- If the knowledge base context is insufficient, say clearly that the information is insufficient.\n- Do not approve work on behalf of PM, CM, Designer, Consultant, Owner, or Authority.\n- Escalate questions involving fire-rated systems, structural issues, safety risks, variation orders, NCR, specification substitutions, or unclear design conflicts.\n- If escalation is needed, include this exact line anywhere before the citation:\nESCALATE: \u003cshort reason, max 12 words\u003e\n\nAnswer UX rules:\n- Start with the direct main answer in 1-2 short sentences.\n- Then add a heading line when useful, for example \"ควรทำแบบนี้ครับ:\".\n- Prefer bullets for steps, checks, options, or warnings.\n- Use 3-5 bullets for the main practical guidance.\n- Keep the visible main answer concise: normally 80-160 Thai words, up to 220 words only for step-by-step procedures.\n- Do not write one long paragraph. Put each heading and bullet on its own line.\n- Do not paste long KB passages. Summarize into site-action guidance.\n\nCreful KB hint rules:\n- If KB Context contains useful guidance beyond the main answer, add a short hidden KB hint block before the citation.\n- The KB hint must be advisory, not the dominant part of the answer.\n- Use no more than 2 bullets and no more than 70 Thai words total.\n- The KB hint must feel natural and useful; do not repeat the main answer word-for-word.\n- Format exactly:\nKB_HINT:\n- \u003cshort Creful KB guidance\u003e\n- \u003coptional second short guidance\u003e\nEND_KB_HINT\n- If there is no useful extra KB guidance, omit KB_HINT entirely.\n\nCitation rule:\n- Do not put citation markers inside the answer body.\n- Use exactly one citation marker, on the final line only.\n- Your final line must be exactly in this format:\n*(📚 ข้อมูล: XX% | 🎯 มั่นใจ: YY% | 🔗 Ref: \u003cdoc_id\u003e)*\n- Replace XX and YY with percentage numbers.\n- Replace \u003cdoc_id\u003e with the most relevant reference id from KB Context.\n- Do not add anything after the citation line.\n`.trim();\n\nconst kb_context = previous.kb_context || `\nNo relevant deployed KB context was loaded. The assistant must say the KB is insufficient and must not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\n`.trim();\n\nconst conversation_history = history\n  .map((item, index) =\u003e {\n    const role = item.role || item.sender || \"unknown\";\n    const content = item.content || item.message || \"\";\n    return `${index + 1}. ${role}: ${content}`;\n  })\n  .join(\"\\n\");\n\nconst user_prompt = `\nKB Context:\n${kb_context}\n\nConversation history:\n${conversation_history || \"(no previous history)\"}\n\nCurrent user message:\n${previous.message}\n\nMetadata:\n- session_id: ${previous.session_id || \"\"}\n- student_id: ${previous.student_id || \"\"}\n- course_id: ${previous.course_id || \"\"}\n- nickname: ${previous.nickname || \"\"}\n- citation_parse_failed: ${previous.citation_parse_failed === true ? \"true\" : \"false\"}\n- model_strategy: ${previous.model_strategy || \"\"}\n- model_selection_reason: ${previous.model_selection_reason || \"\"}\n- kb_context_source: ${previous.kb_context_source || \"\"}\n- kb_doc_ids: ${Array.isArray(previous.kb_doc_ids) ? previous.kb_doc_ids.join(\", \") : \"\"}\n- kb_index_loaded: ${previous.kb_index_loaded === true ? \"true\" : \"false\"}\n\nAnswer the current user message using the KB context, safety rules, Answer UX rules, and KB hint rules.\n`.trim();\n\nconst messages = [\n  {\n    role: \"system\",\n    content: system_prompt,\n  },\n  {\n    role: \"user\",\n    content: user_prompt,\n  },\n];\n\nreturn [\n  {\n    json: {\n      ...previous,\n      model,\n      model_strategy: previous.model_strategy || \"standard_quality\",\n      model_selection_reason: previous.model_selection_reason || \"\",\n      safety_critical: previous.safety_critical === true,\n      primary_model: previous.primary_model || model,\n      fallback_model: previous.fallback_model || \"openai/gpt-5.5\",\n      openrouter_body: {\n        model,\n        messages,\n        temperature,\n        max_tokens,\n      },\n    },\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1888,
+                                       -16
+                                   ],
+                      "id":  "5c64a6cd-0b97-4c46-bc4e-eab4fcfae737",
+                      "name":  "Build Prompt"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://openrouter.ai/api/v1/chat/completions",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "HTTP-Referer",
+                                                                                         "value":  "https://creful-ai-tutor.vercel.app"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "X-Title",
+                                                                                         "value":  "Creful AI Tutor"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{JSON.stringify($json.openrouter_body)}}",
+                                         "options":  {
+                                                         "timeout":  60000
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       2112,
+                                       -16
+                                   ],
+                      "id":  "de9b8bf8-b23f-4547-ab20-c831c6aa053d",
+                      "name":  "OpenRouter Chat Completion",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "HiU57o3IO6lsjSpW",
+                                                                 "name":  "OpenRouter API Key"
+                                                             }
+                                      },
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst original = $(\u0027Build Prompt\u0027).first().json;\n\nlet fallbackRequest = {};\ntry {\n  fallbackRequest = $(\u0027Build Fallback Request\u0027).first().json;\n} catch (error) {\n  fallbackRequest = {};\n}\n\nconst now = Date.now();\n\nconst trace_id = input.trace_id || fallbackRequest.trace_id || original.trace_id || \"\";\nconst started_at = Number(input.started_at || fallbackRequest.started_at || original.started_at || now);\nconst timestamp = input.timestamp || fallbackRequest.timestamp || original.timestamp || new Date(now).toISOString();\n\nconst session_id = input.session_id || fallbackRequest.session_id || original.session_id || \"\";\nconst student_id = input.student_id || fallbackRequest.student_id || original.student_id || \"\";\nconst course_id = input.course_id || fallbackRequest.course_id || original.course_id || \"\";\nconst nickname = input.nickname || fallbackRequest.nickname || original.nickname || \"\";\nconst question = input.message || fallbackRequest.message || original.message || \"\";\n\nconst fallback_used =\n  input.fallback_used === true ||\n  fallbackRequest.fallback_used === true ||\n  original.fallback_used === true ||\n  false;\n\nconst primary_error =\n  input.primary_error ||\n  fallbackRequest.primary_error ||\n  original.primary_error ||\n  \"\";\n\nconst model_strategy =\n  input.model_strategy ||\n  fallbackRequest.model_strategy ||\n  original.model_strategy ||\n  \"standard_quality\";\n\nconst safety_critical =\n  input.safety_critical === true ||\n  fallbackRequest.safety_critical === true ||\n  original.safety_critical === true ||\n  false;\n\nconst model_selection_reason =\n  input.model_selection_reason ||\n  fallbackRequest.model_selection_reason ||\n  original.model_selection_reason ||\n  \"\";\n\nconst model =\n  input.model ||\n  input.body?.model ||\n  input.data?.model ||\n  (fallback_used ? (fallbackRequest.fallback_model || original.fallback_model) : original.model) ||\n  \"\";\n\nconst response_time_ms = now - started_at;\n\nconst usage =\n  input.usage ||\n  input.body?.usage ||\n  input.data?.usage ||\n  {};\n\nconst usage_prompt_tokens = usage.prompt_tokens ?? usage.promptTokens ?? null;\nconst usage_completion_tokens = usage.completion_tokens ?? usage.completionTokens ?? null;\nconst usage_total_tokens = usage.total_tokens ?? usage.totalTokens ?? null;\nconst response_cost =\n  usage.cost ??\n  input.cost ??\n  input.body?.cost ??\n  input.data?.cost ??\n  null;\n\nconst openrouterError =\n  input.error ||\n  input.body?.error ||\n  input.data?.error ||\n  input.message?.error ||\n  null;\n\nconst safeErrorAnswer = openrouterError\n  ? \"ระบบ AI ขัดข้องชั่วคราวครับ กรุณาลองใหม่อีกครั้ง หรือแจ้ง Trainer ให้ช่วยตรวจสอบครับ\"\n  : \"ระบบขัดข้องชั่วคราวครับ กรุณาลองใหม่อีกครั้ง\";\n\nconst escalationFallbackAnswer =\n  \"ขอส่งต่อให้วิศวกรหรือ Trainer ตรวจสอบก่อนครับ เพราะเรื่องนี้อยู่นอกขอบเขตที่ผมยืนยันได้\";\n\nconst rawAnswer =\n  input.choices?.[0]?.message?.content ||\n  input.body?.choices?.[0]?.message?.content ||\n  input.data?.choices?.[0]?.message?.content ||\n  \"\";\n\nfunction normalizeWhitespace(value) {\n  return String(value || \"\")\n    .replace(/\\r\\n/g, \"\\n\")\n    .replace(/[ \\t]+\\n/g, \"\\n\")\n    .replace(/\\n{3,}/g, \"\\n\\n\")\n    .trim();\n}\n\nfunction normalizeKbHint(value) {\n  const lines = normalizeWhitespace(value)\n    .split(\"\\n\")\n    .map((line) =\u003e line.replace(/^\\s*(?:[-*•]|\\d+[.)])\\s*/, \"\").trim())\n    .filter(Boolean)\n    .slice(0, 2);\n\n  const clipped = lines.map((line) =\u003e {\n    const compact = line.replace(/\\s{2,}/g, \" \").trim();\n    return compact.length \u003e 180 ? `${compact.slice(0, 177).trim()}...` : compact;\n  });\n\n  return clipped.map((line) =\u003e `- ${line}`).join(\"\\n\");\n}\n\nfunction extractKbHint(value) {\n  const kbHintRegex = /(?:^|\\n)\\s*KB_HINT:\\s*\\n([\\s\\S]*?)\\n\\s*END_KB_HINT\\s*(?=\\n|$)/i;\n  const match = String(value || \"\").match(kbHintRegex);\n  if (!match) {\n    return { answer: value, kb_hint: \"\" };\n  }\n\n  return {\n    answer: String(value || \"\").replace(kbHintRegex, \"\\n\").trim(),\n    kb_hint: normalizeKbHint(match[1]),\n  };\n}\n\nfunction buildOutput({\n  answer,\n  kb_hint,\n  kb_relevance,\n  confidence,\n  doc_id,\n  escalate,\n  escalate_reason,\n  citation_parse_failed,\n}) {\n  const safeAnswer = normalizeWhitespace(answer) || (escalate ? escalationFallbackAnswer : safeErrorAnswer);\n  const safeKbHint = normalizeKbHint(kb_hint);\n\n  const frontend_response = {\n    answer: safeAnswer,\n    kb_hint: safeKbHint,\n    kb_relevance,\n    confidence,\n    doc_id,\n    escalate,\n    escalate_reason,\n    model,\n    trace_id,\n  };\n\n  const sheet_log_payload = {\n    timestamp,\n    trace_id,\n    session_id,\n    student_id,\n    course_id,\n    nickname,\n    question,\n    answer: safeAnswer,\n    kb_hint: safeKbHint,\n    response_time_ms,\n    kb_relevance,\n    confidence,\n    doc_id,\n    model,\n    escalated: escalate,\n    escalate_reason,\n    citation_parse_failed,\n    fallback_used,\n    primary_error: primary_error ? String(primary_error).slice(0, 1000) : \"\",\n    model_strategy,\n    model_selection_reason,\n    safety_critical,\n    usage_prompt_tokens,\n    usage_completion_tokens,\n    usage_total_tokens,\n    response_cost,\n    feedback_type: \"\",\n  };\n\n  return [\n    {\n      json: {\n        ...frontend_response,\n        sheet_log_payload,\n        frontend_response,\n      },\n    },\n  ];\n}\n\nif (!rawAnswer) {\n  return buildOutput({\n    answer: safeErrorAnswer,\n    kb_hint: \"\",\n    kb_relevance: 0,\n    confidence: 0,\n    doc_id: openrouterError ? \"openrouter_error\" : \"system_error\",\n    escalate: Boolean(openrouterError),\n    escalate_reason: openrouterError\n      ? \"OpenRouter request failed or returned no usable answer\"\n      : \"\",\n    citation_parse_failed: true,\n  });\n}\n\nlet answer = String(rawAnswer).trim();\nlet kb_hint = \"\";\n\nconst parsedKbHint = extractKbHint(answer);\nanswer = parsedKbHint.answer;\nkb_hint = parsedKbHint.kb_hint;\n\nconst citationRegex = /\\*?\\(\\s*\\uD83D\\uDCDA\\s*\\u0e02\\u0e49\\u0e2d\\u0e21\\u0e39\\u0e25:\\s*(\\d+)%\\s*\\|\\s*\\uD83C\\uDFAF\\s*\\u0e21\\u0e31\\u0e48\\u0e19\\u0e43\\u0e08:\\s*(\\d+)%\\s*\\|\\s*\\uD83D\\uDD17\\s*Ref:\\s*([^)]+?)\\s*\\)\\*?/gu;\nconst citationMatches = [...answer.matchAll(citationRegex)];\nconst citationMatch = citationMatches.at(-1);\n\nlet kb_relevance = null;\nlet confidence = null;\nlet doc_id = \"\";\nlet citation_parse_failed = false;\n\nif (citationMatch) {\n  kb_relevance = Number(citationMatch[1]);\n  confidence = Number(citationMatch[2]);\n  doc_id = citationMatch[3].trim();\n  answer = answer.replace(citationRegex, \"\").trim();\n} else {\n  citation_parse_failed = true;\n  const fallbackDocIds = Array.isArray(original.kb_doc_ids) ? original.kb_doc_ids.filter(Boolean) : [];\n  if (fallbackDocIds.length \u003e 0) {\n    kb_relevance = 70;\n    confidence = 60;\n    doc_id = fallbackDocIds[0];\n  }\n}\n\nconst bannedPersonaPatterns = [\n  /[\"\u0027“”]?นะจ๊ะ[\"\u0027“”]?/g,\n  /[\"\u0027“”]?นะคะ[\"\u0027“”]?/g,\n  /[\"\u0027“”]?ค่ะ[\"\u0027“”]?/g,\n  /[\"\u0027“”]?จ้ะ[\"\u0027“”]?/g,\n  /[\"\u0027“”]?จ้า[\"\u0027“”]?/g,\n];\n\nfor (const pattern of bannedPersonaPatterns) {\n  answer = answer.replace(pattern, \"\").replace(/\\s{2,}/g, \" \").trim();\n}\n\nconst escapedCitationTailRegex = /\\*\\(\\uD83D\\uDCDA[\\s\\S]*$/;\nanswer = answer.replace(escapedCitationTailRegex, \"\").trim();\n\nconst escalateRegex = /(?:^|[\\n\\r\\s\u003e-])ESCALATE:\\s*([^\\n\\r]*)(?=\\n|\\r|$)/i;\nconst escalateMatch = answer.match(escalateRegex);\n\nlet escalate = false;\nlet escalate_reason = \"\";\n\nif (escalateMatch) {\n  escalate = true;\n  escalate_reason = escalateMatch[1].replace(/[*_#\u003e-]+/g, \" \").replace(/\\s{2,}/g, \" \").trim();\n  if (escalate_reason.length \u003e 140) {\n    escalate_reason = `${escalate_reason.slice(0, 137).trim()}...`;\n  }\n  answer = answer.replace(escalateRegex, \"\\n\").replace(/[ \\t]+\\n/g, \"\\n\").replace(/\\n{3,}/g, \"\\n\\n\").trim();\n}\n\nconst injectionLikeInput = /ignore|you are now|unrestricted|system prompt|developer message|previous instructions|jailbreak|prompt injection|confirm|verify|ลืม system prompt|ลืมคำสั่ง|เมื่อกี้|ใช่ไหม|ยืนยัน/i.test(question);\n\nfunction escapeRegExp(value) {\n  return value.replace(/[.*+?^${}()|[\\]\\\\]/g, \"\\\\$\u0026\");\n}\n\nif (injectionLikeInput) {\n  const injectedNumberUnits = new Set(\n    [...String(question).matchAll(/(\\d+)\\s*(mm|มม\\.?|cm|ซม\\.?|m\\b|เมตร|D\\b|Nm|kg(?:\\/m2)?|กก\\.?)/giu)]\n      .map((match) =\u003e `${escapeRegExp(match[1])}\\\\s*${escapeRegExp(match[2])}`),\n  );\n\n  for (const escapedToken of injectedNumberUnits) {\n    const tokenRegex = new RegExp(escapedToken, \"giu\");\n    answer = answer.replace(tokenRegex, \"ค่าที่อ้างถึง\");\n  }\n\n  answer = answer.replace(/\\s{2,}/g, \" \").trim();\n}\n\nreturn buildOutput({\n  answer,\n  kb_hint,\n  kb_relevance,\n  confidence,\n  doc_id,\n  escalate,\n  escalate_reason,\n  citation_parse_failed,\n});"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       3008,
+                                       -16
+                                   ],
+                      "id":  "c37b73a3-c9fa-4606-a373-9a6ec9408c54",
+                      "name":  "Parse Answer"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "PASTE_SHEET_WEBHOOK_URL_HERE",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "contentType":  "raw",
+                                         "rawContentType":  "application/json",
+                                         "body":  "={{ JSON.stringify($json.sheet_log_payload) }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       3232,
+                                       -256
+                                   ],
+                      "id":  "96799f20-4a51-4a97-884e-a7adc9ccbe65",
+                      "name":  "Log to Google Sheet",
+                      "notesInFlow":  true,
+                      "notes":  "Before import/use, replace PASTE_SHEET_WEBHOOK_URL_HERE with the Apps Script Web App URL. This n8n instance blocks $env access in node expressions.",
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "respondWith":  "json",
+                                         "responseBody":  "={{ $json.frontend_response }}",
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.respondToWebhook",
+                      "typeVersion":  1.5,
+                      "position":  [
+                                       3232,
+                                       32
+                                   ],
+                      "id":  "b3d36075-2141-483b-9894-bbcb66ce8a70",
+                      "name":  "Respond to Frontend"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "44ac9c7b-e537-42ea-af71-a779e7ae706e",
+                                                                                   "leftValue":  "={{ $json.ok }}",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       320,
+                                       -64
+                                   ],
+                      "id":  "5bae9a12-6de7-43d7-bb3d-b7f34bb0cb65",
+                      "name":  "Is Valid Payload?"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst now = Date.now();\n\nconst trace_id =\n  input.trace_id ||\n  `trace_${now}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst frontend_response = {\n  answer: \"ขออภัยครับ ระบบยังไม่ได้รับคำถาม กรุณาพิมพ์คำถามแล้วลองใหม่อีกครั้งครับ\",\n  kb_relevance: 0,\n  confidence: 0,\n  doc_id: \"validation_error\",\n  escalate: false,\n  escalate_reason: \"\",\n  model: \"validation\",\n  trace_id,\n};\n\nreturn [\n  {\n    json: {\n      ...frontend_response,\n      frontend_response,\n      sheet_log_payload: {\n        timestamp: input.timestamp || new Date(now).toISOString(),\n        trace_id,\n        session_id: input.session_id || \"\",\n        student_id: input.student_id || \"\",\n        course_id: input.course_id || \"\",\n        nickname: input.nickname || \"\",\n        question: \"\",\n        answer: frontend_response.answer,\n        response_time_ms: 0,\n        kb_relevance: 0,\n        confidence: 0,\n        doc_id: \"validation_error\",\n        model: \"validation\",\n        escalated: false,\n        escalate_reason: \"\",\n        citation_parse_failed: false,\n        fallback_used: false,\n        primary_error: \"\",\n        model_strategy: \"guard\",\n        model_selection_reason: \"Validation failed before model routing.\",\n        safety_critical: false,\n        usage_prompt_tokens: null,\n        usage_completion_tokens: null,\n        usage_total_tokens: null,\n        response_cost: null,\n        feedback_type: \"validation_error\",\n      },\n    },\n  },\n];\n"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       3008,
+                                       176
+                                   ],
+                      "id":  "3695c03a-6fb2-48cb-aca2-a52b288df686",
+                      "name":  "Build Validation Error Response"
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "d4ae001c-bee8-4ba6-a26d-cdf045cab14e",
+                                                                                   "leftValue":  "={{ $json.choices?.[0]?.message?.content || $json.body?.choices?.[0]?.message?.content || $json.data?.choices?.[0]?.message?.content || \"\" }}\n",
+                                                                                   "rightValue":  "",
+                                                                                   "operator":  {
+                                                                                                    "type":  "string",
+                                                                                                    "operation":  "notEmpty",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       2336,
+                                       -16
+                                   ],
+                      "id":  "0a95702e-d4d1-4f90-8647-d9595a9bcb72",
+                      "name":  "Primary Has Answer?"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const original = $(\u0027Build Prompt\u0027).first().json;\nconst primaryResult = $input.first().json;\n\nconst fallbackModel = original.fallback_model || \"anthropic/claude-sonnet-4.6\";\n\nconst primary_error =\n  primaryResult.error ||\n  primaryResult.body?.error ||\n  primaryResult.data?.error ||\n  primaryResult.message ||\n  \"Primary model returned no usable answer\";\n\nreturn [\n  {\n    json: {\n      ...original,\n      model: fallbackModel,\n      fallback_used: true,\n      primary_error,\n      model_strategy: original.model_strategy || \"standard_quality\",\n      model_selection_reason: original.model_selection_reason || \"\",\n      safety_critical: original.safety_critical === true,\n      fallback_model: fallbackModel,\n      openrouter_body: {\n        ...original.openrouter_body,\n        model: fallbackModel,\n      },\n    },\n  },\n];\n"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       2560,
+                                       16
+                                   ],
+                      "id":  "513fcd43-f096-4604-a1e6-e760529fa7f4",
+                      "name":  "Build Fallback Request"
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "POST",
+                                         "url":  "https://openrouter.ai/api/v1/chat/completions",
+                                         "authentication":  "genericCredentialType",
+                                         "genericAuthType":  "httpHeaderAuth",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "Content-Type",
+                                                                                         "value":  "application/json"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "HTTP-Referer",
+                                                                                         "value":  "https://creful-ai-tutor.vercel.app"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "X-Title",
+                                                                                         "value":  "Creful AI Tutor"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "sendBody":  true,
+                                         "specifyBody":  "json",
+                                         "jsonBody":  "={{JSON.stringify($json.openrouter_body)}}",
+                                         "options":  {
+                                                         "timeout":  60000
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.4,
+                      "position":  [
+                                       2784,
+                                       16
+                                   ],
+                      "id":  "9bda4f7f-0881-41c7-b30e-78d8adf73b6b",
+                      "name":  "OpenRouter Fallback Completion",
+                      "retryOnFail":  true,
+                      "credentials":  {
+                                          "httpHeaderAuth":  {
+                                                                 "id":  "HiU57o3IO6lsjSpW",
+                                                                 "name":  "OpenRouter API Key"
+                                                             }
+                                      },
+                      "onError":  "continueRegularOutput"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\n\nconst now = Date.now();\nconst windowMs = 3000;\n\nconst key = [\n  input.session_id || \"anonymous_session\",\n  input.student_id || \"anonymous_student\",\n].join(\":\");\n\nconst staticData = $getWorkflowStaticData(\"global\");\nstaticData.crefulRateLimitStore = staticData.crefulRateLimitStore || {};\n\nconst lastSeen = Number(staticData.crefulRateLimitStore[key] || 0);\nconst elapsed = now - lastSeen;\n\nstaticData.crefulRateLimitStore[key] = now;\n\nfor (const [storeKey, timestamp] of Object.entries(staticData.crefulRateLimitStore)) {\n  if (now - Number(timestamp) \u003e 10 * 60 * 1000) {\n    delete staticData.crefulRateLimitStore[storeKey];\n  }\n}\n\nif (elapsed \u003e 0 \u0026\u0026 elapsed \u003c windowMs) {\n  const retryAfterMs = windowMs - elapsed;\n\n  return [\n    {\n      json: {\n        ...input,\n        ok: false,\n        rate_limited: true,\n        retry_after_ms: retryAfterMs,\n      },\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      rate_limited: false,\n      retry_after_ms: 0,\n    },\n  },\n];\n"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       544,
+                                       -160
+                                   ],
+                      "id":  "5d6c75af-4b84-4c7d-add9-17f07e94c165",
+                      "name":  "Rate Limit Guard",
+                      "notesInFlow":  true,
+                      "notes":  "MVP guard using workflow static data. For strict production concurrency, replace with n8n Data Store, Redis, DB row lock, or queue-based throttling."
+                  },
+                  {
+                      "parameters":  {
+                                         "conditions":  {
+                                                            "options":  {
+                                                                            "caseSensitive":  true,
+                                                                            "leftValue":  "",
+                                                                            "typeValidation":  "strict",
+                                                                            "version":  3
+                                                                        },
+                                                            "conditions":  [
+                                                                               {
+                                                                                   "id":  "3bd5ffab-59cf-4ce3-9905-bbbf49ea3672",
+                                                                                   "leftValue":  "={{ $json.rate_limited }}",
+                                                                                   "rightValue":  "=",
+                                                                                   "operator":  {
+                                                                                                    "type":  "boolean",
+                                                                                                    "operation":  "true",
+                                                                                                    "singleValue":  true
+                                                                                                }
+                                                                               }
+                                                                           ],
+                                                            "combinator":  "and"
+                                                        },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "type":  "n8n-nodes-base.if",
+                      "typeVersion":  2.3,
+                      "position":  [
+                                       768,
+                                       -160
+                                   ],
+                      "id":  "607efed3-f193-4e25-8f03-09a4787d4249",
+                      "name":  "Is Rate Limited?"
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\n\nconst now = Date.now();\nconst retrySeconds = Math.max(1, Math.ceil(Number(input.retry_after_ms || 0) / 1000));\n\nconst trace_id =\n  input.trace_id ||\n  `trace_${now}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst answer = `ขอพักสัก ${retrySeconds} วินาทีครับ แล้วลองถามใหม่อีกครั้งครับ`;\n\nconst frontend_response = {\n  answer,\n  kb_relevance: 0,\n  confidence: 0,\n  doc_id: \"rate_limited\",\n  escalate: false,\n  escalate_reason: \"\",\n  model: \"rate_limit\",\n  trace_id,\n};\n\nreturn [\n  {\n    json: {\n      ...frontend_response,\n      frontend_response,\n      sheet_log_payload: {\n        timestamp: input.timestamp || new Date(now).toISOString(),\n        trace_id,\n        session_id: input.session_id || \"\",\n        student_id: input.student_id || \"\",\n        course_id: input.course_id || \"\",\n        nickname: input.nickname || \"\",\n        question: input.message || \"\",\n        answer,\n        response_time_ms: 0,\n        kb_relevance: 0,\n        confidence: 0,\n        doc_id: \"rate_limited\",\n        model: \"rate_limit\",\n        escalated: false,\n        escalate_reason: \"\",\n        citation_parse_failed: false,\n        fallback_used: false,\n        primary_error: \"\",\n        model_strategy: \"guard\",\n        model_selection_reason: \"Rate limit guard blocked the request before model routing.\",\n        safety_critical: false,\n        usage_prompt_tokens: null,\n        usage_completion_tokens: null,\n        usage_total_tokens: null,\n        response_cost: null,\n        feedback_type: \"rate_limited\",\n      },\n    },\n  },\n];\n"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       3008,
+                                       -304
+                                   ],
+                      "id":  "2ffb8e94-321f-40d7-ab7c-68f45904ecfb",
+                      "name":  "Build Rate Limit Response"
+                  },
+                  {
+                      "id":  "967b0f07-bdf7-4541-94bd-5955aa17cfff",
+                      "name":  "Select Model Strategy",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       992,
+                                       64
+                                   ],
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst text = String(input.message || \"\").toLowerCase();\nconst history = Array.isArray(input.history) ? input.history : [];\n\nconst MODELS = {\n  fastLite: \"google/gemini-2.5-flash-lite\",\n  fast: \"google/gemini-2.5-flash\",\n  quality: \"openai/gpt-5.5\",\n  safety: \"anthropic/claude-sonnet-4.6\",\n};\n\nfunction hasAny(words) {\n  return words.some((word) =\u003e text.includes(word));\n}\n\nconst injectionKeywords = [\n  \"ignore\",\n  \"system prompt\",\n  \"developer message\",\n  \"instruction\",\n  \"jailbreak\",\n  \"prompt injection\",\n  \"\\u0e25\\u0e37\\u0e21 system prompt\",\n  \"\\u0e25\\u0e37\\u0e21\\u0e04\\u0e33\\u0e2a\\u0e31\\u0e48\\u0e07\",\n  \"\\u0e15\\u0e2d\\u0e1a\\u0e40\\u0e1b\\u0e47\\u0e19\\u0e20\\u0e32\\u0e29\\u0e32\\u0e2d\\u0e31\\u0e07\\u0e01\\u0e24\\u0e29\",\n  \"\\u0e20\\u0e32\\u0e29\\u0e32\\u0e2d\\u0e31\\u0e07\\u0e01\\u0e24\\u0e29\",\n];\n\nconst safetyKeywords = [\n  \"fire-rated\",\n  \"fire rated\",\n  \"\\u0e01\\u0e31\\u0e19\\u0e44\\u0e1f\",\n  \"\\u0e17\\u0e19\\u0e44\\u0e1f\",\n  \"\\u0e42\\u0e04\\u0e23\\u0e07\\u0e2a\\u0e23\\u0e49\\u0e32\\u0e07\",\n  \"structural\",\n  \"\\u0e04\\u0e27\\u0e32\\u0e21\\u0e1b\\u0e25\\u0e2d\\u0e14\\u0e20\\u0e31\\u0e22\",\n  \"safety\",\n  \"\\u0e23\\u0e30\\u0e22\\u0e30\",\n  \"\\u0e02\\u0e19\\u0e32\\u0e14\",\n  \"\\u0e2b\\u0e19\\u0e32\",\n  \"\\u0e21\\u0e21\",\n  \"mm\",\n  \"\\u0e15\\u0e31\\u0e27\\u0e40\\u0e25\\u0e02\",\n  \"spec\",\n  \"\\u0e2a\\u0e40\\u0e1b\\u0e01\",\n  \"boq\",\n  \"\\u0e41\\u0e1a\\u0e1a\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\",\n  \"\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\\u0e01\\u0e31\\u0e19\",\n  \"ncr\",\n  \"vo\",\n  \"variation\",\n  \"\\u0e40\\u0e1b\\u0e25\\u0e35\\u0e48\\u0e22\\u0e19\\u0e27\\u0e31\\u0e2a\\u0e14\\u0e38\",\n  \"substitution\",\n  \"\\u0e21\\u0e32\\u0e15\\u0e23\\u0e10\\u0e32\\u0e19\",\n  \"code\",\n  \"tolerance\",\n  \"approve\",\n  \"approval\",\n  \"\\u0e2d\\u0e19\\u0e38\\u0e21\\u0e31\\u0e15\\u0e34\",\n];\n\nconst simpleKeywords = [\n  \"\\u0e04\\u0e37\\u0e2d\\u0e2d\\u0e30\\u0e44\\u0e23\",\n  \"\\u0e2b\\u0e21\\u0e32\\u0e22\\u0e16\\u0e36\\u0e07\",\n  \"\\u0e22\\u0e48\\u0e2d\\u0e21\\u0e32\\u0e08\\u0e32\\u0e01\",\n  \"definition\",\n  \"what is\",\n  \"rfi \\u0e04\\u0e37\",\n];\n\nconst complexKeywords = [\n  \"\\u0e27\\u0e34\\u0e40\\u0e04\\u0e23\\u0e32\\u0e30\\u0e2b\\u0e4c\",\n  \"\\u0e40\\u0e1b\\u0e23\\u0e35\\u0e22\\u0e1a\\u0e40\\u0e17\\u0e35\\u0e22\\u0e1a\",\n  \"\\u0e2b\\u0e25\\u0e32\\u0e22\\u0e02\\u0e31\\u0e49\\u0e19\",\n  \"\\u0e17\\u0e33\\u0e22\\u0e31\\u0e07\\u0e44\\u0e07\\u0e15\\u0e48\\u0e2d\",\n  \"\\u0e22\\u0e31\\u0e07\\u0e44\\u0e21\\u0e48\\u0e41\\u0e19\\u0e48\\u0e43\\u0e08\",\n  \"edge case\",\n];\n\nconst hasInjectionRisk = hasAny(injectionKeywords);\nconst isSafetyCritical = hasAny(safetyKeywords) || /\\d+\\s*(mm|\\u0e21\\u0e21|\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e42\\u0e21\\u0e07|%)/i.test(text);\nconst isSimple = text.length \u003c= 90 \u0026\u0026 history.length === 0 \u0026\u0026 hasAny(simpleKeywords) \u0026\u0026 !isSafetyCritical \u0026\u0026 !hasInjectionRisk;\nconst isComplex = history.length \u003e 0 || text.length \u003e 240 || hasAny(complexKeywords);\n\nlet model_strategy = \"standard_fast\";\nlet primary_model = MODELS.fast;\nlet fallback_model = MODELS.quality;\nlet model_selection_reason = \"Default KB tutor route; use Gemini 2.5 Flash for speed/cost, fallback to GPT-5.5 for answer quality.\";\n\nif (hasInjectionRisk) {\n  model_strategy = \"security_guard\";\n  primary_model = MODELS.quality;\n  fallback_model = MODELS.safety;\n  model_selection_reason = \"Prompt-injection or instruction override pattern detected; use strongest guard-capable model first.\";\n} else if (isSafetyCritical) {\n  model_strategy = \"safety_quality\";\n  primary_model = MODELS.safety;\n  fallback_model = MODELS.quality;\n  model_selection_reason = \"Safety, numerical, specification, approval, or design-conflict keyword detected; prefer safety-quality model first.\";\n} else if (isComplex) {\n  model_strategy = \"complex_quality\";\n  primary_model = MODELS.quality;\n  fallback_model = MODELS.safety;\n  model_selection_reason = \"Multi-turn, long, or analytical scenario; use highest-quality model first.\";\n} else if (isSimple) {\n  model_strategy = \"simple_fast\";\n  primary_model = MODELS.fastLite;\n  fallback_model = MODELS.quality;\n  model_selection_reason = \"Short low-risk definition/navigation question; use cheapest low-latency model first.\";\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      model_strategy,\n      model_selection_reason,\n      safety_critical: isSafetyCritical,\n      prompt_injection_risk: hasInjectionRisk,\n      primary_model,\n      fallback_model,\n    },\n  },\n];\n"
+                                     }
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst KB_INDEX_URL = \"https://creful-ai-tutor.vercel.app/KB/_index.json\";\nconst KB_BASE_URL = \"https://creful-ai-tutor.vercel.app/KB\";\n\nasync function requestJson(url) {\n  if (this?.helpers?.httpRequest) {\n    return await this.helpers.httpRequest({\n      method: \"GET\",\n      url,\n      json: true,\n      timeout: 10000,\n    });\n  }\n\n  if (typeof fetch !== \"function\") {\n    throw new Error(\"No HTTP client available in this n8n Code node runtime.\");\n  }\n\n  const response = await fetch(url, { method: \"GET\" });\n  const text = await response.text();\n\n  if (!response.ok) {\n    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);\n  }\n\n  return text ? JSON.parse(text) : null;\n}\n\ntry {\n  const cacheBust = Date.now();\n  const kb_index = await requestJson.call(this, `${KB_INDEX_URL}?v=${cacheBust}`);\n\n  return [\n    {\n      json: {\n        ...input,\n        kb_base_url: KB_BASE_URL,\n        kb_index_url: KB_INDEX_URL,\n        kb_index,\n        kb_index_loaded: true,\n        kb_index_error: \"\",\n      },\n    },\n  ];\n} catch (error) {\n  return [\n    {\n      json: {\n        ...input,\n        kb_base_url: KB_BASE_URL,\n        kb_index_url: KB_INDEX_URL,\n        kb_index: null,\n        kb_index_loaded: false,\n        kb_index_error: error.message || String(error),\n        kb_context: \"[doc_id: KB_UNAVAILABLE]\\nDeployed KB index could not be loaded from Vercel. The assistant must say the knowledge base is temporarily unavailable and avoid giving numerical/specification claims.\",\n        kb_doc_ids: [\"KB_UNAVAILABLE\"],\n      },\n    },\n  ];\n}"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       992,
+                                       -160
+                                   ],
+                      "id":  "b2fca043-cc85-4a0f-b899-73fb8b808e9a",
+                      "name":  "Load KB Index from Vercel",
+                      "notesInFlow":  true,
+                      "notes":  "Public GET. No credentials needed. Loads https://creful-ai-tutor.vercel.app/KB/_index.json with cache-busting query."
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst index = input.kb_index || {};\nconst docs = Array.isArray(index.docs) ? index.docs : [];\nconst message = String(input.message || \"\").toLowerCase();\n\nfunction hasAny(words) {\n  return words.some((word) =\u003e message.includes(word));\n}\n\nfunction normalize(value) {\n  return String(value || \"\").toLowerCase();\n}\n\nfunction docHaystack(doc) {\n  return [\n    doc.doc_id,\n    doc.title,\n    doc.module,\n    doc.type,\n    doc.authority,\n    ...(Array.isArray(doc.topic_tags) ? doc.topic_tags : []),\n  ].map(normalize).join(\" \");\n}\n\nconst keywordGroups = [\n  { words: [\"rfi\", \"\\u0e02\\u0e2d\\u0e02\\u0e49\\u0e2d\\u0e21\\u0e39\\u0e25\", \"clarification\"], boosts: [\"m4\", \"template\", \"log\", \"document\", \"understandthedocuments\", \"integrationprocess\", \"discrepancymanagement\"] },\n  { words: [\"rfa\", \"\\u0e2d\\u0e19\\u0e38\\u0e21\\u0e31\\u0e15\\u0e34\\u0e27\\u0e31\\u0e2a\\u0e14\\u0e38\", \"material approval\"], boosts: [\"m4\", \"material\", \"spec\", \"qc\"] },\n  { words: [\"boq\", \"\\u0e1b\\u0e23\\u0e34\\u0e21\\u0e32\\u0e13\", \"quantity\"], boosts: [\"boq\", \"m4\", \"m1.4_s2.g3\"] },\n  { words: [\"spec\", \"\\u0e2a\\u0e40\\u0e1b\\u0e04\", \"specification\"], boosts: [\"spec\", \"material\", \"qc\", \"m4.3\", \"m1.4_s2.g1\"] },\n  { words: [\"\\u0e41\\u0e1a\\u0e1a\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\", \"\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\\u0e01\\u0e31\\u0e19\", \"conflict\", \"\\u0e02\\u0e31\\u0e14\\u0e41\\u0e22\\u0e49\\u0e07\", \"discrepancy\"], boosts: [\"discrepancy\", \"integrationprocess\", \"understandthedocuments\", \"m1.4_s4\", \"m1.4_s3\"] },\n  { words: [\"triangle\", \"\\u0e2a\\u0e32\\u0e21\\u0e40\\u0e2b\\u0e25\\u0e35\\u0e48\\u0e22\\u0e21\", \"\\u0e15\\u0e23\\u0e27\\u0e08\\u0e40\\u0e2d\\u0e01\\u0e2a\\u0e32\\u0e23\", \"\\u0e25\\u0e33\\u0e14\\u0e31\\u0e1a\\u0e40\\u0e2d\\u0e01\\u0e2a\\u0e32\\u0e23\"], boosts: [\"understandthedocuments\", \"boq\", \"spec\", \"documents\", \"m4.1\"] },\n  { words: [\"drawing\", \"\\u0e41\\u0e1a\\u0e1a\", \"plan\", \"elevation\", \"detail\"], boosts: [\"drawing\", \"detail\", \"plans\", \"elevations\", \"m1\", \"m3\"] },\n  { words: [\"electrical\", \"ไฟฟ้า\", \"สายไฟ\", \"ปลั๊ก\", \"outlet\", \"power\", \"mep\"], boosts: [\"mep\", \"electrical\", \"m1.4_s2.g2\", \"integrationprocess\", \"discrepancymanagement\"] },\n  { words: [\"joinery\", \"built-in\", \"builtin\", \"เฟอร์นิเจอร์\", \"บิ้วอิน\", \"ตู้\", \"furniture\"], boosts: [\"joinery\", \"millwork\", \"built\", \"m3.4\", \"m1.3_s2.g4\", \"mep\"] },\n  { words: [\"clash\", \"ชน\", \"ทับ\", \"จม\", \"ไม่ตรง\", \"ขัดกัน\"], boosts: [\"mep\", \"joinery\", \"discrepancy\", \"integrationprocess\", \"m1.4_s2.g2\", \"m3.4\", \"m1.4_s4\"] },\n  { words: [\"\\u0e2b\\u0e19\\u0e49\\u0e32\\u0e07\\u0e32\\u0e19\", \"site\", \"daily\", \"handover\", \"takeover\"], boosts: [\"m5\", \"dailyoperations\", \"handover\", \"sitetakeover\"] },\n  { words: [\"fire\", \"fire-rated\", \"\\u0e01\\u0e31\\u0e19\\u0e44\\u0e1f\", \"\\u0e42\\u0e04\\u0e23\\u0e07\\u0e2a\\u0e23\\u0e49\\u0e32\\u0e07\", \"structural\", \"safety\", \"\\u0e1b\\u0e25\\u0e2d\\u0e14\\u0e20\\u0e31\\u0e22\"], boosts: [\"safety\", \"m5\", \"material\", \"spec\"] },\n];\n\nconst words = message\n  .split(/[^\\p{L}\\p{N}._-]+/u)\n  .map((word) =\u003e word.trim())\n  .filter((word) =\u003e word.length \u003e= 2);\n\nconst scored = docs.map((doc, index) =\u003e {\n  const haystack = docHaystack(doc);\n  let score = 0;\n\n  for (const word of words) {\n    if (haystack.includes(word)) score += 1;\n  }\n\n  for (const group of keywordGroups) {\n    if (!hasAny(group.words)) continue;\n    for (const boost of group.boosts) {\n      if (haystack.includes(boost.toLowerCase())) score += 6;\n    }\n  }\n\n  if (normalize(doc.status) === \"published\") score += 2;\n  if (normalize(doc.status) === \"approved\") score += 1;\n  if (normalize(doc.authority) === \"high\") score += 1;\n\n  return { doc, score, index };\n});\n\nlet selected = scored\n  .filter((item) =\u003e item.score \u003e 0)\n  .sort((a, b) =\u003e b.score - a.score || a.index - b.index)\n  .slice(0, 5)\n  .map((item) =\u003e item.doc);\n\nif (selected.length === 0) {\n  selected = scored\n    .filter((item) =\u003e /m4|m1\\.4|m5/i.test(String(item.doc.doc_id || item.doc.title || \"\")))\n    .slice(0, 5)\n    .map((item) =\u003e item.doc);\n}\n\nconst kb_selected_docs = selected.map((doc) =\u003e ({\n  ...doc,\n  kb_doc_url: \"https://creful-ai-tutor.vercel.app/\" + doc.path,\n}));\n\nreturn [\n  {\n    json: {\n      ...input,\n      kb_selected_docs,\n      kb_selected_doc_ids: kb_selected_docs.map((doc) =\u003e doc.doc_id || doc.title || \"\").filter(Boolean),\n    },\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1216,
+                                       -160
+                                   ],
+                      "id":  "8c084a73-278d-42c0-8091-4d91f53a5f5b",
+                      "name":  "Select KB Docs",
+                      "notesInFlow":  true,
+                      "notes":  "Scores deployed KB index metadata and selects up to 5 likely relevant KB JSON docs."
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst selectedDocs = Array.isArray(input.kb_selected_docs) ? input.kb_selected_docs : [];\n\nasync function requestJson(url) {\n  if (this?.helpers?.httpRequest) {\n    return await this.helpers.httpRequest({\n      method: \"GET\",\n      url,\n      json: true,\n      timeout: 10000,\n    });\n  }\n\n  if (typeof fetch !== \"function\") {\n    throw new Error(\"No HTTP client available in this n8n Code node runtime.\");\n  }\n\n  const response = await fetch(url, { method: \"GET\" });\n  const text = await response.text();\n\n  if (!response.ok) {\n    throw new Error(`HTTP ${response.status}: ${text.slice(0, 500)}`);\n  }\n\n  return text ? JSON.parse(text) : null;\n}\n\nconst kb_docs = [];\nconst kb_doc_fetch_errors = [];\nconst cacheBust = Date.now();\n\nfor (const docMeta of selectedDocs) {\n  const url = `${docMeta.kb_doc_url}?v=${cacheBust}`;\n  try {\n    const doc = await requestJson.call(this, url);\n    kb_docs.push({\n      ...docMeta,\n      ...(doc || {}),\n      fetched_url: docMeta.kb_doc_url,\n    });\n  } catch (error) {\n    kb_doc_fetch_errors.push({\n      doc_id: docMeta.doc_id || docMeta.title || \"\",\n      url: docMeta.kb_doc_url,\n      error: error.message || String(error),\n    });\n  }\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      kb_docs,\n      kb_doc_fetch_errors,\n    },\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1440,
+                                       -160
+                                   ],
+                      "id":  "ab55a283-5775-4dd4-bfe0-2eb625ce4dc9",
+                      "name":  "Load KB Docs from Vercel",
+                      "notesInFlow":  true,
+                      "notes":  "Public GET. No credentials needed. Fetches selected https://creful-ai-tutor.vercel.app/KB/*.json docs."
+                  },
+                  {
+                      "parameters":  {
+                                         "jsCode":  "const input = $input.first().json;\nconst docs = Array.isArray(input.kb_docs) ? input.kb_docs : [];\nconst perDocLimit = input.model_strategy === \"simple_fast\" ? 2500 : 4000;\nconst totalLimit = input.model_strategy === \"simple_fast\" ? 9000 : 15000;\n\nfunction cleanText(value) {\n  return String(value || \"\")\n    .replace(/\\r\\n/g, \"\\n\")\n    .replace(/\\n{3,}/g, \"\\n\\n\")\n    .trim();\n}\n\nlet remaining = totalLimit;\nconst sections = [];\n\nfor (const doc of docs) {\n  if (remaining \u003c= 0) break;\n\n  const body = cleanText(doc.content).slice(0, Math.min(perDocLimit, remaining));\n  if (!body) continue;\n\n  const section = [\n    `[doc_id: ${doc.doc_id || doc.title || \"unknown\"}]`,\n    `Title: ${doc.title || \"\"}`,\n    `Module: ${doc.module || \"\"}`,\n    `Type: ${doc.type || \"\"}`,\n    `Status: ${doc.status || \"\"}`,\n    `Authority: ${doc.authority || \"\"}`,\n    \"\",\n    body,\n  ].join(\"\\n\");\n\n  sections.push(section);\n  remaining -= section.length;\n}\n\nconst errors = Array.isArray(input.kb_doc_fetch_errors) ? input.kb_doc_fetch_errors : [];\nlet kb_context = sections.join(\"\\n\\n---\\n\\n\").trim();\n\nif (!kb_context) {\n  kb_context = input.kb_context || [\n    \"[doc_id: KB_UNAVAILABLE]\",\n    \"No relevant deployed KB document could be loaded from Vercel for this request.\",\n    \"The assistant must say the KB is insufficient and must not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\",\n  ].join(\"\\n\");\n}\n\nif (errors.length) {\n  kb_context += \"\\n\\n[KB fetch warnings]\\n\" + errors\n    .map((item) =\u003e `- ${item.doc_id || \"unknown\"}: ${item.error}`)\n    .join(\"\\n\");\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      kb_context,\n      kb_doc_ids: docs.map((doc) =\u003e doc.doc_id || doc.title || \"\").filter(Boolean),\n      kb_context_source: \"vercel_kb_json\",\n    },\n  },\n];"
+                                     },
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       1664,
+                                       -160
+                                   ],
+                      "id":  "b92342ff-cc1b-4d83-b39b-b970eeb3169a",
+                      "name":  "Build KB Context",
+                      "notesInFlow":  true,
+                      "notes":  "Builds bounded prompt context from deployed KB docs and adds strict fallback if KB cannot be loaded."
+                  }
+              ],
+    "pinData":  {
+
+                },
+    "connections":  {
+                        "Webhook":  {
+                                        "main":  [
+                                                     [
+                                                         {
+                                                             "node":  "Validate Payload",
+                                                             "type":  "main",
+                                                             "index":  0
+                                                         }
+                                                     ]
+                                                 ]
+                                    },
+                        "Validate Payload":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Is Valid Payload?",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Build Prompt":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "OpenRouter Chat Completion",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "OpenRouter Chat Completion":  {
+                                                           "main":  [
+                                                                        [
+                                                                            {
+                                                                                "node":  "Primary Has Answer?",
+                                                                                "type":  "main",
+                                                                                "index":  0
+                                                                            }
+                                                                        ],
+                                                                        [
+
+                                                                        ]
+                                                                    ]
+                                                       },
+                        "Parse Answer":  {
+                                             "main":  [
+                                                          [
+                                                              {
+                                                                  "node":  "Log to Google Sheet",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              },
+                                                              {
+                                                                  "node":  "Respond to Frontend",
+                                                                  "type":  "main",
+                                                                  "index":  0
+                                                              }
+                                                          ]
+                                                      ]
+                                         },
+                        "Log to Google Sheet":  {
+                                                    "main":  [
+                                                                 [
+
+                                                                 ]
+                                                             ]
+                                                },
+                        "Is Valid Payload?":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Rate Limit Guard",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ],
+                                                               [
+                                                                   {
+                                                                       "node":  "Build Validation Error Response",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              },
+                        "Build Validation Error Response":  {
+                                                                "main":  [
+                                                                             [
+                                                                                 {
+                                                                                     "node":  "Respond to Frontend",
+                                                                                     "type":  "main",
+                                                                                     "index":  0
+                                                                                 }
+                                                                             ]
+                                                                         ]
+                                                            },
+                        "Primary Has Answer?":  {
+                                                    "main":  [
+                                                                 [
+                                                                     {
+                                                                         "node":  "Parse Answer",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ],
+                                                                 [
+                                                                     {
+                                                                         "node":  "Build Fallback Request",
+                                                                         "type":  "main",
+                                                                         "index":  0
+                                                                     }
+                                                                 ]
+                                                             ]
+                                                },
+                        "Build Fallback Request":  {
+                                                       "main":  [
+                                                                    [
+                                                                        {
+                                                                            "node":  "OpenRouter Fallback Completion",
+                                                                            "type":  "main",
+                                                                            "index":  0
+                                                                        }
+                                                                    ]
+                                                                ]
+                                                   },
+                        "OpenRouter Fallback Completion":  {
+                                                               "main":  [
+                                                                            [
+                                                                                {
+                                                                                    "node":  "Parse Answer",
+                                                                                    "type":  "main",
+                                                                                    "index":  0
+                                                                                }
+                                                                            ]
+                                                                        ]
+                                                           },
+                        "Rate Limit Guard":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Is Rate Limited?",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Is Rate Limited?":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Build Rate Limit Response",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ],
+                                                              [
+                                                                  {
+                                                                      "node":  "Select Model Strategy",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Build Rate Limit Response":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Respond to Frontend",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           },
+                                                                           {
+                                                                               "node":  "Log to Google Sheet",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Select Model Strategy":  {
+                                                      "main":  [
+                                                                   [
+                                                                       {
+                                                                           "node":  "Load KB Index from Vercel",
+                                                                           "type":  "main",
+                                                                           "index":  0
+                                                                       }
+                                                                   ]
+                                                               ]
+                                                  },
+                        "Load KB Index from Vercel":  {
+                                                          "main":  [
+                                                                       [
+                                                                           {
+                                                                               "node":  "Select KB Docs",
+                                                                               "type":  "main",
+                                                                               "index":  0
+                                                                           }
+                                                                       ]
+                                                                   ]
+                                                      },
+                        "Select KB Docs":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Load KB Docs from Vercel",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Load KB Docs from Vercel":  {
+                                                         "main":  [
+                                                                      [
+                                                                          {
+                                                                              "node":  "Build KB Context",
+                                                                              "type":  "main",
+                                                                              "index":  0
+                                                                          }
+                                                                      ]
+                                                                  ]
+                                                     },
+                        "Build KB Context":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Build Prompt",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             }
+                    },
+    "active":  false,
+    "settings":  {
+                     "executionOrder":  "v1",
+                     "binaryMode":  "separate"
+                 },
+    "versionId":  "7b551019-e0bb-473c-8a19-4dcdec55080d",
+    "meta":  {
+                 "instanceId":  "f009703e5dcacc8ed25fa2170364c4db0546c8ceafb31201c2c6ec55bcf7ca3b"
+             },
+    "id":  "hUFfu0cYGbKOGbqw",
+    "tags":  [
+
+             ]
 }
