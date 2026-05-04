@@ -1,0 +1,12 @@
+{
+  "doc_id": "Foreman_M2.5_OfficeAreaDetails",
+  "title": "Foreman_M2.5_OfficeAreaDetails",
+  "status": "in_review",
+  "module": "Module 2",
+  "type": "Concept",
+  "authority": "Medium",
+  "topic_tags": [],
+  "source_url": "https://www.notion.so/Foreman_M2-5_OfficeAreaDetails-51d04e3de3fd4363b5fb5387ad640514",
+  "content": "## 1. หลักการและใจความสำคัญ (Core Concept)\n\n- **คำนิยาม:** พื้นที่ทำงานหลักของพนักงาน เน้นการใช้งานจริง ความเป็นระเบียบ และสภาพแวดล้อมที่เอื้อต่อ Productivity\n\n- **เป้าหมาย:** ให้ตำแหน่ง Outlet/LAN/Lighting ตรงกับ Furniture Layout จริง ไม่ใช่ตำแหน่งโดยประมาณ\n\n- **กฎเหล็ก: \"Furniture First, Outlet Follows\":** ตำแหน่งงานระบบทุกจุดต้องอ้างอิงจาก Furniture Layout — ห้ามเดินไฟก่อนยืนยัน Furniture\n\n## 2. องค์ประกอบที่ต้องอ่านในแบบ (Anatomy)\n\n### A. Partition\n\n- มักไม่มาก ใช้ผนังยิปซัม หรือผนังไม้ตกแต่งกั้นโซน\n\n### B. Wall Finishing\n\n- เน้นเรียบง่าย ทำความสะอาดง่าย — วัสดุที่พบ: สีทาผนัง, ลามิเนต\n\n### C. Joinery\n\n- **ตู้เอกสาร:** ใช้งาน + รับน้ำหนัก + เปิด-ปิดสะดวก + ระบบล็อค\n\n- **โต๊ะทำงาน:** ตำแหน่งขึ้นสายไฟ, Grommet, ระยะโต๊ะตามแบบ\n\n- **Phone Booth:** ตำแหน่ง, จุดขึ้นสายไฟ + ระบายอากาศ, ระยะโดยรอบไม่กีดขวาง\n\n### D. Ceiling / Floor\n\n- **Ceiling 2 รูปแบบ:**\n\n- **Floor:** ส่วนใหญ่เป็นพรม — สังเกต Pattern ของวัสดุ\n\n### E. Graphic & Signage\n\n- ตำแหน่งติดตั้ง + พื้นที่/ขนาด\n\n## 3. MEP Coordination Points\n\n- **Power Outlet:** ตำแหน่งต้องตรงกับโต๊ะแต่ละตัว (Floor Box หรือ Wall Outlet หรือ Service Pole)\n\n- **Lighting:** โคมต้อง Center กับห้องหรือโต๊ะ\n\n- **LAN/Data:** ตำแหน่ง RJ45 ตรงกับโต๊ะ — 1 โต๊ะ → 1 LAN port ขั้นต่ำ\n\n- **AC Diffuser:** ไม่พ่นลมเย็นลงบนจอคอมพิวเตอร์โดยตรง — จะทำให้งานพังและรบกวนผู้ใช้งาน\n\n## 4. ข้อผิดพลาดที่พบบ่อย (Common Mistakes)\n\n- **ติด Outlet ผิดตำแหน่ง:** ผู้ใช้ต้องมุดสายข้ามโต๊ะ — ต้องยืนยัน Furniture Layout กับลูกค้าก่อนสั่ง Furniture\n\n- **โคมไฟไม่ Center ห้อง/โต๊ะ:** ตรวจสอบ Grid Pattern ของ RCP ก่อน + Mark-up ถ้า Designer ไม่ได้ติดชัดเจน\n\n- **Phone Booth รอบข้างไม่กันขวาง:** ใช้ Acoustic Sealant รอบขอบ + Door Bottom Seal ตรวจ STC ตาม spec\n\n- **ไม่สำรอง LAN ไว้ล่วงหน้า:** โต๊ะงอกมีความเสี่ยง LAN ไม่พอ — ต้องเผื่อ \"สายสำรอง 1 เส้น\" ต่อโต๊ะ เผื่อ Future Move",
+  "updated_at": "2026-05-02T05:38:00.000Z"
+}
