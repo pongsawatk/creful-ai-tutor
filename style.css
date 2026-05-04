@@ -58,10 +58,11 @@ button {
   display: grid;
   grid-template-rows: auto 1fr auto auto;
   width: min(100%, var(--app-max-width));
-  min-height: 100dvh;
+  height: 100%;
   margin: 0 auto;
   background: var(--surface);
   box-shadow: 0 0 0 1px rgba(21, 101, 192, 0.06);
+  overflow: hidden;
 }
 
 .top-app-bar {
@@ -267,32 +268,128 @@ button {
   justify-items: end;
 }
 
-.bubble {
-  max-width: min(88%, 600px);
-  padding: 12px 14px;
-  background: var(--bot-bubble);
-  border: 1px solid rgba(121, 116, 126, 0.2);
+.bot-card {
+  display: grid;
+  gap: 10px;
+  width: min(92%, 640px);
+  padding: 14px 14px 12px;
+  background: var(--surface-container);
+  border: 1px solid rgba(121, 116, 126, 0.22);
   border-radius: 6px 14px 14px 14px;
   box-shadow: var(--shadow-1);
+}
+
+.bot-card.is-escalated {
+  border-color: rgba(211, 47, 47, 0.45);
+  background: #FFF7F5;
+}
+
+.bot-card.is-low-kb {
+  border-color: var(--warning-border);
+  background: #FFFCEF;
+}
+
+.bot-card.is-error {
+  border-color: rgba(211, 47, 47, 0.45);
+  background: #FFF5F5;
+}
+
+.bubble {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   color: var(--on-surface);
-  font-size: 18px;
+  font-size: 17px;
   line-height: 28px;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
 
-.is-user .bubble {
-  background: var(--user-bubble);
-  border-color: rgba(21, 101, 192, 0.26);
-  border-radius: 14px 6px 14px 14px;
+.bubble p {
+  margin: 0;
 }
 
-.trust-warning,
-.citation-chip,
-.engineer-chip,
-.escalation-card,
-.feedback-row {
+.bubble p + p,
+.bubble p + ul,
+.bubble p + ol,
+.bubble ul + p,
+.bubble ol + p {
+  margin-top: 8px;
+}
+
+.bubble ul,
+.bubble ol {
+  margin: 0;
+  padding-left: 22px;
+}
+
+.bubble li {
+  margin: 2px 0;
+}
+
+.bubble li::marker {
+  color: var(--primary);
+  font-weight: 700;
+}
+
+.bubble strong {
+  font-weight: 800;
+  color: var(--on-surface);
+}
+
+.bubble em {
+  font-style: italic;
+  color: #2A4A7F;
+}
+
+.bubble code {
+  padding: 1px 6px;
+  background: rgba(21, 101, 192, 0.08);
+  border-radius: 4px;
+  font-family: "JetBrains Mono", "Consolas", monospace;
+  font-size: 0.92em;
+}
+
+.is-user .bubble {
   max-width: min(88%, 600px);
+  padding: 12px 14px;
+  background: var(--user-bubble);
+  border: 1px solid rgba(21, 101, 192, 0.26);
+  border-radius: 14px 6px 14px 14px;
+  box-shadow: var(--shadow-1);
+  font-size: 18px;
+  white-space: pre-wrap;
+}
+
+.extra-info {
+  margin-top: 12px;
+  padding: 10px 12px;
+  background: rgba(21, 101, 192, 0.06);
+  border-left: 3px solid var(--primary);
+  border-radius: 4px 8px 8px 4px;
+}
+
+.extra-info-intro {
+  margin: 0 0 6px;
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.extra-info-body {
+  color: var(--on-surface);
+  font-size: 16px;
+  line-height: 26px;
+}
+
+.extra-info-body p {
+  margin: 0;
+}
+
+.extra-info-body p + p {
+  margin-top: 6px;
 }
 
 .trust-warning {
@@ -308,24 +405,14 @@ button {
 
 .citation-chip,
 .engineer-chip {
-  min-height: 40px;
-  padding: 8px 12px;
+  justify-self: start;
+  min-height: 36px;
+  padding: 6px 12px;
   border-radius: 999px;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 13px;
+  font-weight: 700;
   line-height: 22px;
   overflow-wrap: anywhere;
-}
-
-.citation-chip {
-  background: var(--citation-chip);
-  color: var(--tertiary);
-}
-
-.citation-chip.is-warning {
-  background: var(--warning-bg);
-  color: #5D3B00;
-  border: 1px solid var(--warning-border);
 }
 
 .engineer-chip {
@@ -334,41 +421,26 @@ button {
   border: 1px solid rgba(27, 94, 32, 0.28);
 }
 
-.escalation-card {
-  display: grid;
-  gap: 10px;
-  padding: 12px;
-  background: #FFEBEE;
-  border: 2px solid var(--error);
-  border-radius: var(--radius-sm);
-  box-shadow: var(--shadow-1);
+.citation-chip {
+  margin-top: 4px;
+  padding-top: 8px;
+  background: transparent;
+  border-top: 1px dashed rgba(121, 116, 126, 0.35);
+  border-radius: 0;
+  color: var(--on-surface-variant);
+  font-size: 12px;
+  font-weight: 600;
+  justify-self: stretch;
 }
 
-.escalation-card p {
-  margin: 0;
-  color: #7A1C1C;
-  font-size: 16px;
-  font-weight: 800;
-  line-height: 26px;
-}
-
-.escalation-card button {
-  min-height: 48px;
-  justify-self: start;
-  padding: 10px 16px;
-  background: #FFFFFF;
-  border: 2px solid var(--error);
-  border-radius: var(--radius-sm);
-  color: var(--error);
-  font-weight: 850;
-  cursor: pointer;
+.citation-chip.is-warning {
+  color: #8A5A00;
 }
 
 .feedback-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
-  width: min(88%, 600px);
 }
 
 .feedback-button {
@@ -521,8 +593,7 @@ button {
   }
 
   .app-shell {
-    min-height: calc(100dvh - 36px);
-    overflow: hidden;
+    height: calc(100dvh - 36px);
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-2);
   }

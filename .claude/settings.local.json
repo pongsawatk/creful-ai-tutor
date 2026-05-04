@@ -3,7 +3,8 @@
     "allow": [
       "mcp__6a48687d-adfd-4975-a8da-ab13eaa15758__notion-search",
       "mcp__6a48687d-adfd-4975-a8da-ab13eaa15758__notion-fetch",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "mcp__Claude_Preview__preview_start"
     ]
   }
 }

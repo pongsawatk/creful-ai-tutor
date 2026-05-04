@@ -21,7 +21,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://ct-automation.builk.com https://script.google.com https://script.googleusercontent.com; frame-ancestors 'self' https://creful.co.th https://*.creful.co.th; base-uri 'self'; form-action 'self'; object-src 'none'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https://ct-automation.builk.com https://script.google.com https://script.googleusercontent.com; frame-ancestors 'self' https://creful.co.th https://*.creful.co.th; base-uri 'self'; form-action 'self'; object-src 'none'"
         }
       ]
     },
