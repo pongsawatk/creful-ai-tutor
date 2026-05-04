@@ -496,7 +496,9 @@ button {
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
-  margin-top: -2px;
+  width: min(92%, 640px);
+  margin: -2px 0 2px;
+  padding-left: 10px;
 }
 
 .typing-card {
