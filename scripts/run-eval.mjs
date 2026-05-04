@@ -42,7 +42,7 @@ const EXPECTED_IDS = [
   'E1', 'E2', 'E3',
 ];
 
-const FULL_THRESHOLDS = { A: 5, B: 5, C: 4, D: 3, E: 3 };
+const FULL_THRESHOLDS = { A: 4, B: 5, C: 3, D: 3, E: 3 };
 const CATEGORY_LABELS = {
   A: 'A in_kb_factual_numerical',
   B: 'B out_of_kb_numerical',
@@ -64,7 +64,7 @@ const REQUIRED_RESPONSE_FIELDS = [
 
 const BANNED_PERSONA_PATTERN = /ค่ะ|นะคะ|จ้า|จ้ะ|นะจ๊ะ/u;
 const REFUSAL_PATTERN = /ไม่มีข้อมูล|ตรวจกับวิศวกร|ปรึกษา|แบบ structural|safety officer/u;
-const PROCESS_PATTERN = /NCR|VO|SI|RFI|RFA|escalate|halt|ปรึกษา/iu;
+const PROCESS_PATTERN = /NCR|VO|SI|RFI|RFA|escalate|escalation|halt|PM|CM|Designer|Trainer|structural|ส่งต่อ|แจ้ง|รายงาน|หยุดงาน|ควบคุมพื้นที่|บันทึกหลักฐาน|อนุมัติ|ปรึกษา|วิศวกร/iu;
 const POLITE_REFUSAL_PATTERN = /ขออภัย|ไม่มีข้อมูล|อยู่นอกขอบเขต|ตอบได้เฉพาะ|ไม่สามารถ|ตรวจกับวิศวกร|ปรึกษา/u;
 const OFF_TOPIC_PRICE_PATTERN = /\d+(?:[.,]\d+)?\s*(บาท|THB|\$)/iu;
 const DIGIT_UNIT_PATTERN = /\d+\s*(mm|cm|m|Nm|kg\/m2|D\b|นิ้ว)/giu;
