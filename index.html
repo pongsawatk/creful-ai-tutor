@@ -505,6 +505,7 @@
         state.isThinking = true;
         updateComposerState();
         setStatus("thinking");
+        showTypingIndicator();
 
         const payload = {
           session_id: state.sessionId,
@@ -554,9 +555,35 @@
             }
           });
         } finally {
+          hideTypingIndicator();
           state.isThinking = false;
           updateComposerState();
         }
+      }
+
+      function showTypingIndicator() {
+        if (document.getElementById("typingIndicator")) return;
+        const group = document.createElement("article");
+        group.className = "message-group is-bot is-typing";
+        group.id = "typingIndicator";
+        group.setAttribute("aria-label", "ครูช่างกำลังพิมพ์");
+        const card = document.createElement("div");
+        card.className = "bot-card typing-card";
+        const indicator = document.createElement("div");
+        indicator.className = "typing-indicator";
+        indicator.innerHTML = "<span></span><span></span><span></span>";
+        const label = document.createElement("span");
+        label.className = "typing-label";
+        label.textContent = "ครูช่างกำลังคิดอยู่ครับ";
+        card.append(indicator, label);
+        group.appendChild(card);
+        elements.chatPanel.appendChild(group);
+        scrollToBottom();
+      }
+
+      function hideTypingIndicator() {
+        const node = document.getElementById("typingIndicator");
+        if (node) node.remove();
       }
 
       async function readWebhookResponse(response) {
