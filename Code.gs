@@ -22,6 +22,13 @@ var LOG_HEADERS = [
   'citation_parse_failed',
   'fallback_used',
   'primary_error',
+  'model_strategy',
+  'model_selection_reason',
+  'safety_critical',
+  'usage_prompt_tokens',
+  'usage_completion_tokens',
+  'usage_total_tokens',
+  'response_cost',
   'feedback_type'
 ];
 
@@ -212,17 +219,17 @@ function parsePostPayload_(e) {
   var contents = e.postData && e.postData.contents ? e.postData.contents : '';
   if (contents) {
     try {
-      return JSON.parse(contents);
+      return parseJsonMaybeNested_(contents);
     } catch (jsonError) {
       if (e.parameter && e.parameter.payload) {
-        return JSON.parse(e.parameter.payload);
+        return parseJsonMaybeNested_(e.parameter.payload);
       }
       throw new Error('Invalid JSON payload');
     }
   }
 
   if (e.parameter && e.parameter.payload) {
-    return JSON.parse(e.parameter.payload);
+    return parseJsonMaybeNested_(e.parameter.payload);
   }
 
   return e.parameter || {};
@@ -248,6 +255,13 @@ function buildLogRow_(payload) {
     citation_parse_failed: valueOrBlank_(payload.citation_parse_failed),
     fallback_used: valueOrBlank_(payload.fallback_used),
     primary_error: firstValue_(payload.primary_error, payload.primaryError, ''),
+    model_strategy: firstValue_(payload.model_strategy, payload.modelStrategy, ''),
+    model_selection_reason: firstValue_(payload.model_selection_reason, payload.modelSelectionReason, ''),
+    safety_critical: valueOrBlank_(payload.safety_critical),
+    usage_prompt_tokens: firstValue_(payload.usage_prompt_tokens, payload.usagePromptTokens, ''),
+    usage_completion_tokens: firstValue_(payload.usage_completion_tokens, payload.usageCompletionTokens, ''),
+    usage_total_tokens: firstValue_(payload.usage_total_tokens, payload.usageTotalTokens, ''),
+    response_cost: firstValue_(payload.response_cost, payload.responseCost, ''),
     feedback_type: firstValue_(payload.feedback_type, payload.feedbackType, '')
   };
 
@@ -292,6 +306,14 @@ function jsonResponse_(body) {
   return ContentService
     .createTextOutput(JSON.stringify(body))
     .setMimeType(ContentService.MimeType.JSON);
+}
+
+function parseJsonMaybeNested_(text) {
+  var parsed = JSON.parse(text);
+  if (typeof parsed === 'string') {
+    parsed = JSON.parse(parsed);
+  }
+  return parsed;
 }
 
 function trimCell_(value) {

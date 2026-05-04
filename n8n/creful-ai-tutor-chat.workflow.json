@@ -1,0 +1,575 @@
+{
+  "name": "Creful AI Tutor - Chat v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "creful-ai-tutor-chat",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -128,
+        -64
+      ],
+      "id": "39e45b84-1fb6-4d25-8605-fedd4e23ec20",
+      "name": "Webhook",
+      "webhookId": "e8b7473f-fc76-4f4d-bc57-f80361e4570a"
+    },
+    {
+      "parameters": {
+        "jsCode": "const inputJson = $input.first().json;\nconst payload = inputJson.body ?? inputJson;\n\nconst started_at = Date.now();\nconst timestamp = new Date(started_at).toISOString();\nconst trace_id = `trace_${started_at}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst message = payload.message == null ? \"\" : String(payload.message).trim();\n\nif (!message) {\n  return [\n    {\n      json: {\n        ok: false,\n        error: \"missing_message\",\n      },\n    },\n  ];\n}\n\nconst history = Array.isArray(payload.history)\n  ? payload.history.slice(-20)\n  : [];\n\nreturn [\n  {\n    json: {\n      ok: true,\n      trace_id,\n      started_at,\n      timestamp,\n      session_id: payload.session_id,\n      student_id: payload.student_id,\n      course_id: payload.course_id,\n      nickname: payload.nickname,\n      message: message.slice(0, 500),\n      history,\n      citation_parse_failed: payload.citation_parse_failed,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        96,
+        -64
+      ],
+      "id": "599a6df8-04be-4007-aab6-7d99b4d0c460",
+      "name": "Validate Payload"
+    },
+    {
+      "parameters": {
+        "jsCode": "const previous = $input.first().json;\n\nif (previous.ok === false) {\n  return [\n    {\n      json: {\n        ...previous,\n        model: \"openai/gpt-5.5\",\n        openrouter_body: null,\n      },\n    },\n  ];\n}\n\nconst model = previous.primary_model || \"openai/gpt-5.5\";\nconst temperature = previous.safety_critical || previous.prompt_injection_risk ? 0.1 : 0.2;\nconst max_tokens = previous.model_strategy === \"simple_fast\" ? 650 : 900;\n\nconst history = Array.isArray(previous.history)\n  ? previous.history.slice(-20)\n  : [];\n\nconst system_prompt = `\nYou are LAS Foreman AI Tutor.\n\nPersona:\n- You are a Thai foreman tutor.\n- Answer in Thai.\n- Use \"ครับ\" only as the polite particle.\n- Be practical, clear, and suitable for construction site supervision.\n\nSafety rules:\n- Do not invent numbers, specifications, dimensions, quantities, tolerances, codes, or approval status.\n- If the knowledge base context is insufficient, say clearly that the information is insufficient.\n- Do not approve work on behalf of PM, CM, Designer, Consultant, Owner, or Authority.\n- Escalate questions involving fire-rated systems, structural issues, safety risks, variation orders, NCR, specification substitutions, or unclear design conflicts.\n- If escalation is needed, include this exact line:\nESCALATE: <reason>\n\nCitation rule:\n- Your final line must be exactly in this format:\n*(📚 ข้อมูล: XX% | 🎯 มั่นใจ: YY% | 🔗 Ref: <doc_id>)*\n- Replace XX and YY with percentage numbers.\n- Replace <doc_id> with the most relevant reference id.\n- Do not add anything after the citation line.\n`.trim();\n\nconst kb_context = `\nMVP KB Context:\n\n[doc_id: KB-RFI-001]\nRFI is used when site teams need clarification because drawings, specifications, BOQ, or site conditions are unclear. Foreman should prepare the issue clearly with location, drawing/spec reference, photos if available, and proposed question before sending to PM/CM/Designer.\n\n[doc_id: KB-CONFLICT-001]\nIf BOQ, Specification, and Drawing conflict, the foreman should not decide the final requirement alone. The issue should be raised to PM/CM/Designer for confirmation. Work should follow the officially clarified instruction.\n\n[doc_id: KB-ESCALATION-001]\nEscalation matrix: fire-rated work, structural work, safety issues, VO, NCR, material/spec substitution, and major drawing/spec conflicts must be escalated to PM/CM/Designer/Consultant as appropriate.\n\n[doc_id: KB-FOREMAN-001]\nWhen uncertain, the foreman should ask PM, CM, or Designer before proceeding, especially where quality, safety, cost, schedule, or compliance may be affected.\n`.trim();\n\nconst conversation_history = history\n  .map((item, index) => {\n    const role = item.role || item.sender || \"unknown\";\n    const content = item.content || item.message || \"\";\n    return `${index + 1}. ${role}: ${content}`;\n  })\n  .join(\"\\n\");\n\nconst user_prompt = `\nKB Context:\n${kb_context}\n\nConversation history:\n${conversation_history || \"(no previous history)\"}\n\nCurrent user message:\n${previous.message}\n\nMetadata:\n- session_id: ${previous.session_id || \"\"}\n- student_id: ${previous.student_id || \"\"}\n- course_id: ${previous.course_id || \"\"}\n- nickname: ${previous.nickname || \"\"}\n- citation_parse_failed: ${previous.citation_parse_failed === true ? \"true\" : \"false\"}\n- model_strategy: ${previous.model_strategy || \"\"}\n- model_selection_reason: ${previous.model_selection_reason || \"\"}\n\nAnswer the current user message using the KB context and safety rules.\n`.trim();\n\nconst messages = [\n  {\n    role: \"system\",\n    content: system_prompt,\n  },\n  {\n    role: \"user\",\n    content: user_prompt,\n  },\n];\n\nreturn [\n  {\n    json: {\n      ...previous,\n      model,\n      model_strategy: previous.model_strategy || \"standard_quality\",\n      model_selection_reason: previous.model_selection_reason || \"\",\n      safety_critical: previous.safety_critical === true,\n      primary_model: previous.primary_model || model,\n      fallback_model: previous.fallback_model || \"openai/gpt-5.5\",\n      openrouter_body: {\n        model,\n        messages,\n        temperature,\n        max_tokens,\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        992,
+        -16
+      ],
+      "id": "5c64a6cd-0b97-4c46-bc4e-eab4fcfae737",
+      "name": "Build Prompt"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://creful-ai-tutor.vercel.app"
+            },
+            {
+              "name": "X-Title",
+              "value": "Creful AI Tutor"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.openrouter_body)}}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1216,
+        -16
+      ],
+      "id": "de9b8bf8-b23f-4547-ab20-c831c6aa053d",
+      "name": "OpenRouter Chat Completion",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HiU57o3IO6lsjSpW",
+          "name": "OpenRouter API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst original = $('Build Prompt').first().json;\n\nlet fallbackRequest = {};\ntry {\n  fallbackRequest = $('Build Fallback Request').first().json;\n} catch (error) {\n  fallbackRequest = {};\n}\n\nconst now = Date.now();\n\nconst trace_id = input.trace_id || fallbackRequest.trace_id || original.trace_id || \"\";\nconst started_at = Number(input.started_at || fallbackRequest.started_at || original.started_at || now);\nconst timestamp = input.timestamp || fallbackRequest.timestamp || original.timestamp || new Date(now).toISOString();\n\nconst session_id = input.session_id || fallbackRequest.session_id || original.session_id || \"\";\nconst student_id = input.student_id || fallbackRequest.student_id || original.student_id || \"\";\nconst course_id = input.course_id || fallbackRequest.course_id || original.course_id || \"\";\nconst nickname = input.nickname || fallbackRequest.nickname || original.nickname || \"\";\nconst question = input.message || fallbackRequest.message || original.message || \"\";\n\nconst fallback_used =\n  input.fallback_used === true ||\n  fallbackRequest.fallback_used === true ||\n  original.fallback_used === true ||\n  false;\n\nconst primary_error =\n  input.primary_error ||\n  fallbackRequest.primary_error ||\n  original.primary_error ||\n  \"\";\n\nconst model_strategy =\n  input.model_strategy ||\n  fallbackRequest.model_strategy ||\n  original.model_strategy ||\n  \"standard_quality\";\n\nconst safety_critical =\n  input.safety_critical === true ||\n  fallbackRequest.safety_critical === true ||\n  original.safety_critical === true ||\n  false;\n\nconst model_selection_reason =\n  input.model_selection_reason ||\n  fallbackRequest.model_selection_reason ||\n  original.model_selection_reason ||\n  \"\";\n\nconst model =\n  input.model ||\n  input.body?.model ||\n  input.data?.model ||\n  (fallback_used ? (fallbackRequest.fallback_model || original.fallback_model) : original.model) ||\n  \"\";\n\nconst response_time_ms = now - started_at;\n\nconst usage =\n  input.usage ||\n  input.body?.usage ||\n  input.data?.usage ||\n  {};\n\nconst usage_prompt_tokens = usage.prompt_tokens ?? usage.promptTokens ?? null;\nconst usage_completion_tokens = usage.completion_tokens ?? usage.completionTokens ?? null;\nconst usage_total_tokens = usage.total_tokens ?? usage.totalTokens ?? null;\nconst response_cost =\n  usage.cost ??\n  input.cost ??\n  input.body?.cost ??\n  input.data?.cost ??\n  null;\n\nconst openrouterError =\n  input.error ||\n  input.body?.error ||\n  input.data?.error ||\n  input.message?.error ||\n  null;\n\nconst safeErrorAnswer = openrouterError\n  ? \"\\u0e23\\u0e30\\u0e1a\\u0e1a AI \\u0e02\\u0e31\\u0e14\\u0e02\\u0e49\\u0e2d\\u0e07\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e04\\u0e23\\u0e32\\u0e27\\u0e04\\u0e23\\u0e31\\u0e1a \\u0e01\\u0e23\\u0e38\\u0e13\\u0e32\\u0e25\\u0e2d\\u0e07\\u0e43\\u0e2b\\u0e21\\u0e48\\u0e2d\\u0e35\\u0e01\\u0e04\\u0e23\\u0e31\\u0e49\\u0e07 \\u0e2b\\u0e23\\u0e37\\u0e2d\\u0e41\\u0e08\\u0e49\\u0e07 Trainer \\u0e43\\u0e2b\\u0e49\\u0e0a\\u0e48\\u0e27\\u0e22\\u0e15\\u0e23\\u0e27\\u0e08\\u0e2a\\u0e2d\\u0e1a\\u0e04\\u0e23\\u0e31\\u0e1a\"\n  : \"\\u0e23\\u0e30\\u0e1a\\u0e1a\\u0e02\\u0e31\\u0e14\\u0e02\\u0e49\\u0e2d\\u0e07\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e04\\u0e23\\u0e32\\u0e27\\u0e04\\u0e23\\u0e31\\u0e1a \\u0e01\\u0e23\\u0e38\\u0e13\\u0e32\\u0e25\\u0e2d\\u0e07\\u0e43\\u0e2b\\u0e21\\u0e48\\u0e2d\\u0e35\\u0e01\\u0e04\\u0e23\\u0e31\\u0e49\\u0e07\";\n\nconst rawAnswer =\n  input.choices?.[0]?.message?.content ||\n  input.body?.choices?.[0]?.message?.content ||\n  input.data?.choices?.[0]?.message?.content ||\n  \"\";\n\nfunction buildOutput({\n  answer,\n  kb_relevance,\n  confidence,\n  doc_id,\n  escalate,\n  escalate_reason,\n  citation_parse_failed,\n}) {\n  const frontend_response = {\n    answer,\n    kb_relevance,\n    confidence,\n    doc_id,\n    escalate,\n    escalate_reason,\n    model,\n    trace_id,\n  };\n\n  const sheet_log_payload = {\n    timestamp,\n    trace_id,\n    session_id,\n    student_id,\n    course_id,\n    nickname,\n    question,\n    answer,\n    response_time_ms,\n    kb_relevance,\n    confidence,\n    doc_id,\n    model,\n    escalated: escalate,\n    escalate_reason,\n    citation_parse_failed,\n    fallback_used,\n    primary_error: primary_error ? String(primary_error).slice(0, 1000) : \"\",\n    model_strategy,\n    model_selection_reason,\n    safety_critical,\n    usage_prompt_tokens,\n    usage_completion_tokens,\n    usage_total_tokens,\n    response_cost,\n    feedback_type: \"\",\n  };\n\n  return [\n    {\n      json: {\n        ...frontend_response,\n        sheet_log_payload,\n        frontend_response,\n      },\n    },\n  ];\n}\n\nif (!rawAnswer) {\n  return buildOutput({\n    answer: safeErrorAnswer,\n    kb_relevance: 0,\n    confidence: 0,\n    doc_id: openrouterError ? \"openrouter_error\" : \"system_error\",\n    escalate: Boolean(openrouterError),\n    escalate_reason: openrouterError\n      ? \"OpenRouter request failed or returned no usable answer\"\n      : \"\",\n    citation_parse_failed: true,\n  });\n}\n\nlet answer = String(rawAnswer).trim();\n\nconst citationRegex = new RegExp(\"\\\\*\\\\(\\\\uD83D\\\\uDCDA \\\\u0e02\\\\u0e49\\\\u0e2d\\\\u0e21\\\\u0e39\\\\u0e25: (\\\\d+)% \\\\| \\\\uD83C\\\\uDFAF \\\\u0e21\\\\u0e31\\\\u0e48\\\\u0e19\\\\u0e43\\\\u0e08: (\\\\d+)% \\\\| \\\\uD83D\\\\uDD17 Ref: ([^)]+)\\\\)\\\\*\");\nconst citationMatch = answer.match(citationRegex);\n\nlet kb_relevance = null;\nlet confidence = null;\nlet doc_id = \"\";\nlet citation_parse_failed = false;\n\nif (citationMatch) {\n  kb_relevance = Number(citationMatch[1]);\n  confidence = Number(citationMatch[2]);\n  doc_id = citationMatch[3].trim();\n  answer = answer.replace(citationRegex, \"\").trim();\n} else {\n  citation_parse_failed = true;\n}\n\nconst bannedPersonaPatterns = [\n  /[\"'????]?\\u0e19\\u0e30\\u0e08\\u0e4a\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e19\\u0e30\\u0e04\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e04\\u0e48\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e08\\u0e49\\u0e30[\"'????]?/g,\n  /[\"'????]?\\u0e08\\u0e49\\u0e32[\"'????]?/g,\n];\n\nfor (const pattern of bannedPersonaPatterns) {\n  answer = answer.replace(pattern, \"\").replace(/\\s{2,}/g, \" \").trim();\n}\n\nconst escapedCitationTailRegex = /\\*\\(\\uD83D\\uDCDA[\\s\\S]*$/;\nanswer = answer.replace(escapedCitationTailRegex, \"\").trim();\n\nconst escalateRegex = /(?:^|[\\n\\r\\s>-])ESCALATE:\\s*([\\s\\S]*?)(?=\\n|\\r|\\*\\(|$)/i;\nconst escalateMatch = answer.match(escalateRegex);\n\nlet escalate = false;\nlet escalate_reason = \"\";\n\nif (escalateMatch) {\n  escalate = true;\n  escalate_reason = escalateMatch[1].replace(/[*_#>-]+/g, \" \").replace(/\\s{2,}/g, \" \").trim();\n  answer = answer.replace(escalateRegex, \" \").replace(/\\s{2,}/g, \" \").trim();\n}\n\nreturn buildOutput({\n  answer,\n  kb_relevance,\n  confidence,\n  doc_id,\n  escalate,\n  escalate_reason,\n  citation_parse_failed,\n});\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -16
+      ],
+      "id": "c37b73a3-c9fa-4606-a373-9a6ec9408c54",
+      "name": "Parse Answer"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "PASTE_SHEET_WEBHOOK_URL_HERE",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "contentType": "raw",
+        "rawContentType": "application/json",
+        "body": "={{ JSON.stringify($json.sheet_log_payload) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2336,
+        -256
+      ],
+      "id": "96799f20-4a51-4a97-884e-a7adc9ccbe65",
+      "name": "Log to Google Sheet",
+      "notesInFlow": true,
+      "notes": "Before import/use, replace PASTE_SHEET_WEBHOOK_URL_HERE with the Apps Script Web App URL. This n8n instance blocks $env access in node expressions.",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json.frontend_response }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2336,
+        32
+      ],
+      "id": "b3d36075-2141-483b-9894-bbcb66ce8a70",
+      "name": "Respond to Frontend"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "44ac9c7b-e537-42ea-af71-a779e7ae706e",
+              "leftValue": "={{ $json.ok }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        320,
+        -64
+      ],
+      "id": "5bae9a12-6de7-43d7-bb3d-b7f34bb0cb65",
+      "name": "Is Valid Payload?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst now = Date.now();\n\nconst trace_id =\n  input.trace_id ||\n  `trace_${now}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst frontend_response = {\n  answer: \"ขออภัยครับ ระบบยังไม่ได้รับคำถาม กรุณาพิมพ์คำถามแล้วลองใหม่อีกครั้งครับ\",\n  kb_relevance: 0,\n  confidence: 0,\n  doc_id: \"validation_error\",\n  escalate: false,\n  escalate_reason: \"\",\n  model: \"validation\",\n  trace_id,\n};\n\nreturn [\n  {\n    json: {\n      ...frontend_response,\n      frontend_response,\n      sheet_log_payload: {\n        timestamp: input.timestamp || new Date(now).toISOString(),\n        trace_id,\n        session_id: input.session_id || \"\",\n        student_id: input.student_id || \"\",\n        course_id: input.course_id || \"\",\n        nickname: input.nickname || \"\",\n        question: \"\",\n        answer: frontend_response.answer,\n        response_time_ms: 0,\n        kb_relevance: 0,\n        confidence: 0,\n        doc_id: \"validation_error\",\n        model: \"validation\",\n        escalated: false,\n        escalate_reason: \"\",\n        citation_parse_failed: false,\n        fallback_used: false,\n        primary_error: \"\",\n        model_strategy: \"guard\",\n        model_selection_reason: \"Validation failed before model routing.\",\n        safety_critical: false,\n        usage_prompt_tokens: null,\n        usage_completion_tokens: null,\n        usage_total_tokens: null,\n        response_cost: null,\n        feedback_type: \"validation_error\",\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        176
+      ],
+      "id": "3695c03a-6fb2-48cb-aca2-a52b288df686",
+      "name": "Build Validation Error Response"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d4ae001c-bee8-4ba6-a26d-cdf045cab14e",
+              "leftValue": "={{ $json.choices?.[0]?.message?.content || $json.body?.choices?.[0]?.message?.content || $json.data?.choices?.[0]?.message?.content || \"\" }}\n",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1440,
+        -16
+      ],
+      "id": "0a95702e-d4d1-4f90-8647-d9595a9bcb72",
+      "name": "Primary Has Answer?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const original = $('Build Prompt').first().json;\nconst primaryResult = $input.first().json;\n\nconst fallbackModel = original.fallback_model || \"anthropic/claude-sonnet-4.6\";\n\nconst primary_error =\n  primaryResult.error ||\n  primaryResult.body?.error ||\n  primaryResult.data?.error ||\n  primaryResult.message ||\n  \"Primary model returned no usable answer\";\n\nreturn [\n  {\n    json: {\n      ...original,\n      model: fallbackModel,\n      fallback_used: true,\n      primary_error,\n      model_strategy: original.model_strategy || \"standard_quality\",\n      model_selection_reason: original.model_selection_reason || \"\",\n      safety_critical: original.safety_critical === true,\n      fallback_model: fallbackModel,\n      openrouter_body: {\n        ...original.openrouter_body,\n        model: fallbackModel,\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1664,
+        16
+      ],
+      "id": "513fcd43-f096-4604-a1e6-e760529fa7f4",
+      "name": "Build Fallback Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "HTTP-Referer",
+              "value": "https://creful-ai-tutor.vercel.app"
+            },
+            {
+              "name": "X-Title",
+              "value": "Creful AI Tutor"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.openrouter_body)}}",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1888,
+        16
+      ],
+      "id": "9bda4f7f-0881-41c7-b30e-78d8adf73b6b",
+      "name": "OpenRouter Fallback Completion",
+      "retryOnFail": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "HiU57o3IO6lsjSpW",
+          "name": "OpenRouter API Key"
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst now = Date.now();\nconst windowMs = 3000;\n\nconst key = [\n  input.session_id || \"anonymous_session\",\n  input.student_id || \"anonymous_student\",\n].join(\":\");\n\nconst staticData = $getWorkflowStaticData(\"global\");\nstaticData.crefulRateLimitStore = staticData.crefulRateLimitStore || {};\n\nconst lastSeen = Number(staticData.crefulRateLimitStore[key] || 0);\nconst elapsed = now - lastSeen;\n\nstaticData.crefulRateLimitStore[key] = now;\n\nfor (const [storeKey, timestamp] of Object.entries(staticData.crefulRateLimitStore)) {\n  if (now - Number(timestamp) > 10 * 60 * 1000) {\n    delete staticData.crefulRateLimitStore[storeKey];\n  }\n}\n\nif (elapsed > 0 && elapsed < windowMs) {\n  const retryAfterMs = windowMs - elapsed;\n\n  return [\n    {\n      json: {\n        ...input,\n        ok: false,\n        rate_limited: true,\n        retry_after_ms: retryAfterMs,\n      },\n    },\n  ];\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      rate_limited: false,\n      retry_after_ms: 0,\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        -160
+      ],
+      "id": "5d6c75af-4b84-4c7d-add9-17f07e94c165",
+      "name": "Rate Limit Guard",
+      "notesInFlow": true,
+      "notes": "MVP guard using workflow static data. For strict production concurrency, replace with n8n Data Store, Redis, DB row lock, or queue-based throttling."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "3bd5ffab-59cf-4ce3-9905-bbbf49ea3672",
+              "leftValue": "={{ $json.rate_limited }}",
+              "rightValue": "=",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        768,
+        -160
+      ],
+      "id": "607efed3-f193-4e25-8f03-09a4787d4249",
+      "name": "Is Rate Limited?"
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\nconst now = Date.now();\nconst retrySeconds = Math.max(1, Math.ceil(Number(input.retry_after_ms || 0) / 1000));\n\nconst trace_id =\n  input.trace_id ||\n  `trace_${now}_${Math.random().toString(36).slice(2, 10)}`;\n\nconst answer = `ขอพักสัก ${retrySeconds} วินาทีครับ แล้วลองถามใหม่อีกครั้งครับ`;\n\nconst frontend_response = {\n  answer,\n  kb_relevance: 0,\n  confidence: 0,\n  doc_id: \"rate_limited\",\n  escalate: false,\n  escalate_reason: \"\",\n  model: \"rate_limit\",\n  trace_id,\n};\n\nreturn [\n  {\n    json: {\n      ...frontend_response,\n      frontend_response,\n      sheet_log_payload: {\n        timestamp: input.timestamp || new Date(now).toISOString(),\n        trace_id,\n        session_id: input.session_id || \"\",\n        student_id: input.student_id || \"\",\n        course_id: input.course_id || \"\",\n        nickname: input.nickname || \"\",\n        question: input.message || \"\",\n        answer,\n        response_time_ms: 0,\n        kb_relevance: 0,\n        confidence: 0,\n        doc_id: \"rate_limited\",\n        model: \"rate_limit\",\n        escalated: false,\n        escalate_reason: \"\",\n        citation_parse_failed: false,\n        fallback_used: false,\n        primary_error: \"\",\n        model_strategy: \"guard\",\n        model_selection_reason: \"Rate limit guard blocked the request before model routing.\",\n        safety_critical: false,\n        usage_prompt_tokens: null,\n        usage_completion_tokens: null,\n        usage_total_tokens: null,\n        response_cost: null,\n        feedback_type: \"rate_limited\",\n      },\n    },\n  },\n];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        -304
+      ],
+      "id": "2ffb8e94-321f-40d7-ab7c-68f45904ecfb",
+      "name": "Build Rate Limit Response"
+    },
+    {
+      "id": "967b0f07-bdf7-4541-94bd-5955aa17cfff",
+      "name": "Select Model Strategy",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        260
+      ],
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\nconst text = String(input.message || \"\").toLowerCase();\nconst history = Array.isArray(input.history) ? input.history : [];\n\nconst MODELS = {\n  fastLite: \"google/gemini-2.5-flash-lite\",\n  fast: \"google/gemini-2.5-flash\",\n  quality: \"openai/gpt-5.5\",\n  safety: \"anthropic/claude-sonnet-4.6\",\n};\n\nfunction hasAny(words) {\n  return words.some((word) => text.includes(word));\n}\n\nconst injectionKeywords = [\n  \"ignore\",\n  \"system prompt\",\n  \"developer message\",\n  \"instruction\",\n  \"jailbreak\",\n  \"prompt injection\",\n  \"\\u0e25\\u0e37\\u0e21 system prompt\",\n  \"\\u0e25\\u0e37\\u0e21\\u0e04\\u0e33\\u0e2a\\u0e31\\u0e48\\u0e07\",\n  \"\\u0e15\\u0e2d\\u0e1a\\u0e40\\u0e1b\\u0e47\\u0e19\\u0e20\\u0e32\\u0e29\\u0e32\\u0e2d\\u0e31\\u0e07\\u0e01\\u0e24\\u0e29\",\n  \"\\u0e20\\u0e32\\u0e29\\u0e32\\u0e2d\\u0e31\\u0e07\\u0e01\\u0e24\\u0e29\",\n];\n\nconst safetyKeywords = [\n  \"fire-rated\",\n  \"fire rated\",\n  \"\\u0e01\\u0e31\\u0e19\\u0e44\\u0e1f\",\n  \"\\u0e17\\u0e19\\u0e44\\u0e1f\",\n  \"\\u0e42\\u0e04\\u0e23\\u0e07\\u0e2a\\u0e23\\u0e49\\u0e32\\u0e07\",\n  \"structural\",\n  \"\\u0e04\\u0e27\\u0e32\\u0e21\\u0e1b\\u0e25\\u0e2d\\u0e14\\u0e20\\u0e31\\u0e22\",\n  \"safety\",\n  \"\\u0e23\\u0e30\\u0e22\\u0e30\",\n  \"\\u0e02\\u0e19\\u0e32\\u0e14\",\n  \"\\u0e2b\\u0e19\\u0e32\",\n  \"\\u0e21\\u0e21\",\n  \"mm\",\n  \"\\u0e15\\u0e31\\u0e27\\u0e40\\u0e25\\u0e02\",\n  \"spec\",\n  \"\\u0e2a\\u0e40\\u0e1b\\u0e01\",\n  \"boq\",\n  \"\\u0e41\\u0e1a\\u0e1a\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\",\n  \"\\u0e44\\u0e21\\u0e48\\u0e15\\u0e23\\u0e07\\u0e01\\u0e31\\u0e19\",\n  \"ncr\",\n  \"vo\",\n  \"variation\",\n  \"\\u0e40\\u0e1b\\u0e25\\u0e35\\u0e48\\u0e22\\u0e19\\u0e27\\u0e31\\u0e2a\\u0e14\\u0e38\",\n  \"substitution\",\n  \"\\u0e21\\u0e32\\u0e15\\u0e23\\u0e10\\u0e32\\u0e19\",\n  \"code\",\n  \"tolerance\",\n  \"approve\",\n  \"approval\",\n  \"\\u0e2d\\u0e19\\u0e38\\u0e21\\u0e31\\u0e15\\u0e34\",\n];\n\nconst simpleKeywords = [\n  \"\\u0e04\\u0e37\\u0e2d\\u0e2d\\u0e30\\u0e44\\u0e23\",\n  \"\\u0e2b\\u0e21\\u0e32\\u0e22\\u0e16\\u0e36\\u0e07\",\n  \"\\u0e22\\u0e48\\u0e2d\\u0e21\\u0e32\\u0e08\\u0e32\\u0e01\",\n  \"definition\",\n  \"what is\",\n  \"rfi \\u0e04\\u0e37\",\n];\n\nconst complexKeywords = [\n  \"\\u0e27\\u0e34\\u0e40\\u0e04\\u0e23\\u0e32\\u0e30\\u0e2b\\u0e4c\",\n  \"\\u0e40\\u0e1b\\u0e23\\u0e35\\u0e22\\u0e1a\\u0e40\\u0e17\\u0e35\\u0e22\\u0e1a\",\n  \"\\u0e2b\\u0e25\\u0e32\\u0e22\\u0e02\\u0e31\\u0e49\\u0e19\",\n  \"\\u0e17\\u0e33\\u0e22\\u0e31\\u0e07\\u0e44\\u0e07\\u0e15\\u0e48\\u0e2d\",\n  \"\\u0e22\\u0e31\\u0e07\\u0e44\\u0e21\\u0e48\\u0e41\\u0e19\\u0e48\\u0e43\\u0e08\",\n  \"edge case\",\n];\n\nconst hasInjectionRisk = hasAny(injectionKeywords);\nconst isSafetyCritical = hasAny(safetyKeywords) || /\\d+\\s*(mm|\\u0e21\\u0e21|\\u0e0a\\u0e31\\u0e48\\u0e27\\u0e42\\u0e21\\u0e07|%)/i.test(text);\nconst isSimple = text.length <= 90 && history.length === 0 && hasAny(simpleKeywords) && !isSafetyCritical && !hasInjectionRisk;\nconst isComplex = history.length > 0 || text.length > 240 || hasAny(complexKeywords);\n\nlet model_strategy = \"standard_fast\";\nlet primary_model = MODELS.fast;\nlet fallback_model = MODELS.quality;\nlet model_selection_reason = \"Default KB tutor route; use Gemini 2.5 Flash for speed/cost, fallback to GPT-5.5 for answer quality.\";\n\nif (hasInjectionRisk) {\n  model_strategy = \"security_guard\";\n  primary_model = MODELS.quality;\n  fallback_model = MODELS.safety;\n  model_selection_reason = \"Prompt-injection or instruction override pattern detected; use strongest guard-capable model first.\";\n} else if (isSafetyCritical) {\n  model_strategy = \"safety_quality\";\n  primary_model = MODELS.safety;\n  fallback_model = MODELS.quality;\n  model_selection_reason = \"Safety, numerical, specification, approval, or design-conflict keyword detected; prefer safety-quality model first.\";\n} else if (isComplex) {\n  model_strategy = \"complex_quality\";\n  primary_model = MODELS.quality;\n  fallback_model = MODELS.safety;\n  model_selection_reason = \"Multi-turn, long, or analytical scenario; use highest-quality model first.\";\n} else if (isSimple) {\n  model_strategy = \"simple_fast\";\n  primary_model = MODELS.fastLite;\n  fallback_model = MODELS.quality;\n  model_selection_reason = \"Short low-risk definition/navigation question; use cheapest low-latency model first.\";\n}\n\nreturn [\n  {\n    json: {\n      ...input,\n      model_strategy,\n      model_selection_reason,\n      safety_critical: isSafetyCritical,\n      prompt_injection_risk: hasInjectionRisk,\n      primary_model,\n      fallback_model,\n    },\n  },\n];\n"
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Validate Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Payload": {
+      "main": [
+        [
+          {
+            "node": "Is Valid Payload?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter Chat Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Completion": {
+      "main": [
+        [
+          {
+            "node": "Primary Has Answer?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Parse Answer": {
+      "main": [
+        [
+          {
+            "node": "Log to Google Sheet",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Respond to Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Log to Google Sheet": {
+      "main": [
+        []
+      ]
+    },
+    "Is Valid Payload?": {
+      "main": [
+        [
+          {
+            "node": "Rate Limit Guard",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Validation Error Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Validation Error Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Frontend",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Primary Has Answer?": {
+      "main": [
+        [
+          {
+            "node": "Parse Answer",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Build Fallback Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Fallback Request": {
+      "main": [
+        [
+          {
+            "node": "OpenRouter Fallback Completion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Fallback Completion": {
+      "main": [
+        [
+          {
+            "node": "Parse Answer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rate Limit Guard": {
+      "main": [
+        [
+          {
+            "node": "Is Rate Limited?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Rate Limited?": {
+      "main": [
+        [
+          {
+            "node": "Build Rate Limit Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Select Model Strategy",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Rate Limit Response": {
+      "main": [
+        [
+          {
+            "node": "Respond to Frontend",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Log to Google Sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Model Strategy": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "7b551019-e0bb-473c-8a19-4dcdec55080d",
+  "meta": {
+    "instanceId": "f009703e5dcacc8ed25fa2170364c4db0546c8ceafb31201c2c6ec55bcf7ca3b"
+  },
+  "id": "hUFfu0cYGbKOGbqw",
+  "tags": []
+}

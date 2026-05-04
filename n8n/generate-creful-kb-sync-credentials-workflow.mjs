@@ -158,7 +158,7 @@ const workflow = {
           batching: {
             batch: {
               batchSize: 1,
-              batchInterval: 1000
+              batchInterval: 100
             }
           },
           response: {
@@ -183,10 +183,59 @@ const workflow = {
       }
     ),
     node(
+      'Code - Has GitHub Writes',
+      'n8n-nodes-base.code',
+      2,
+      [2420, 300],
+      {
+        mode: 'runOnceForAllItems',
+        jsCode: readCode('has-github-writes')
+      }
+    ),
+    node(
+      'IF - Has GitHub Writes',
+      'n8n-nodes-base.if',
+      2.2,
+      [2700, 300],
+      {
+        conditions: {
+          options: {
+            caseSensitive: true,
+            leftValue: '',
+            typeValidation: 'strict',
+            version: 2
+          },
+          conditions: [
+            {
+              id: randomUUID(),
+              leftValue: '={{ $json.has_writes }}',
+              rightValue: true,
+              operator: {
+                type: 'boolean',
+                operation: 'equals'
+              }
+            }
+          ],
+          combinator: 'and'
+        },
+        options: {}
+      }
+    ),
+    node(
+      'Code - Filter GitHub Writes',
+      'n8n-nodes-base.code',
+      2,
+      [2980, 200],
+      {
+        mode: 'runOnceForAllItems',
+        jsCode: readCode('filter-github-writes')
+      }
+    ),
+    node(
       'GitHub - Create Update Or Confirm Skip',
       'n8n-nodes-base.httpRequest',
       4.2,
-      [2420, 300],
+      [3260, 200],
       {
         method: '={{ $json.http_method }}',
         url: `={{ 'https://api.github.com/repos/${githubRepo}/contents/' + encodeURIComponent($json.path).replace(/%2F/g, '/') }}`,
@@ -207,7 +256,7 @@ const workflow = {
           batching: {
             batch: {
               batchSize: 1,
-              batchInterval: 1000
+              batchInterval: 250
             }
           },
           response: {
@@ -225,7 +274,7 @@ const workflow = {
       'Code - Final Response Summary',
       'n8n-nodes-base.code',
       2,
-      [2700, 300],
+      [3540, 300],
       {
         mode: 'runOnceForAllItems',
         jsCode: readCode('final-response-summary')
@@ -256,6 +305,18 @@ const workflow = {
       main: [[{ node: 'Code - Diff GitHub Files', type: 'main', index: 0 }]]
     },
     'Code - Diff GitHub Files': {
+      main: [[{ node: 'Code - Has GitHub Writes', type: 'main', index: 0 }]]
+    },
+    'Code - Has GitHub Writes': {
+      main: [[{ node: 'IF - Has GitHub Writes', type: 'main', index: 0 }]]
+    },
+    'IF - Has GitHub Writes': {
+      main: [
+        [{ node: 'Code - Filter GitHub Writes', type: 'main', index: 0 }],
+        [{ node: 'Code - Final Response Summary', type: 'main', index: 0 }]
+      ]
+    },
+    'Code - Filter GitHub Writes': {
       main: [[{ node: 'GitHub - Create Update Or Confirm Skip', type: 'main', index: 0 }]]
     },
     'GitHub - Create Update Or Confirm Skip': {

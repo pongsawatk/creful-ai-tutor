@@ -1,5 +1,11 @@
 const files = $('Code - Diff GitHub Files').all().map((item) => item.json);
-const responses = $input.all().map((item) => item.json);
+const responsesByPath = new Map(
+  $input.all().map((item) => {
+    const response = item.json;
+    const path = response.body?.content?.path || response.body?.path || response.path;
+    return [path, response];
+  })
+);
 const docs = files.filter((file) => !file.is_index);
 const first = files[0] || {};
 
@@ -7,8 +13,10 @@ function isSuccessStatus(statusCode) {
   return statusCode >= 200 && statusCode < 300;
 }
 
-const results = files.map((file, index) => {
-  const response = responses[index] || {};
+const results = files.map((file) => {
+  const response = file.action === 'skip'
+    ? {}
+    : responsesByPath.get(file.path) || {};
   const statusCode = response.statusCode || response.response?.statusCode || response.body?.status;
   const skipped = file.action === 'skip';
   const success = skipped || isSuccessStatus(statusCode);
