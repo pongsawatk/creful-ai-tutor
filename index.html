@@ -383,14 +383,15 @@
 
         lines.forEach((line) => {
           const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+          const choice = line.match(/^\s*([A-D])[.)]\s+(.+)$/);
           const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
 
-          if (ordered || bullet) {
+          if (ordered || choice || bullet) {
             const nextType = ordered ? "ol" : "ul";
             flushParagraph();
             if (listType && listType !== nextType) flushList();
             listType = nextType;
-            listItems.push(ordered ? ordered[1] : bullet[1]);
+            listItems.push(choice ? `${choice[1]}) ${choice[2]}` : (ordered ? ordered[1] : bullet[1]));
             return;
           }
 
@@ -407,6 +408,7 @@
         return String(text || "")
           .replace(/\r\n/g, "\n")
           .replace(/([^\n])\s+(\d+[.)]\s+)/g, "$1\n$2")
+          .replace(/([^\n])\s+([A-D][.)]\s+)/g, "$1\n$2")
           .replace(/([^\n])\s+(•\s+)/g, "$1\n$2")
           .replace(/\n{3,}/g, "\n\n");
       }
@@ -459,10 +461,10 @@
         feedback.className = "feedback-row";
         const meta = message?.meta || {};
         [
-          ["understood", "👍 เข้าใจแล้ว"],
+          ["understood", "👍 เข้าใจ"],
           ["unclear", "👎 ยังไม่ชัด"],
-          ["example", "🧩 ขอ Example"],
-          ["report_wrong", "📝 รายงานผิด"]
+          ["example", "🧩 Example"],
+          ["report_wrong", "📝 แจ้งผิด"]
         ].forEach(([type, label]) => {
           const button = document.createElement("button");
           button.type = "button";

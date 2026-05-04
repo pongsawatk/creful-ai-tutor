@@ -492,9 +492,11 @@ button {
 }
 
 .feedback-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: -2px;
 }
 
 .typing-card {
@@ -560,23 +562,23 @@ button {
 }
 
 .feedback-button {
-  min-height: 56px;
-  padding: 10px 8px;
-  background: #FFFFFF;
-  border: 2px solid var(--on-surface);
-  border-radius: var(--radius-sm);
-  box-shadow: 3px 3px 0 var(--tertiary);
+  min-height: 30px;
+  padding: 4px 9px;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(21, 101, 192, 0.22);
+  border-radius: 999px;
+  box-shadow: none;
   color: var(--on-surface);
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 850;
-  line-height: 20px;
+  line-height: 18px;
   cursor: pointer;
 }
 
 .feedback-button:active,
 .feedback-button.is-selected {
-  transform: translate(2px, 2px);
-  box-shadow: 1px 1px 0 var(--tertiary);
+  transform: none;
+  border-color: rgba(21, 101, 192, 0.48);
   background: var(--citation-chip);
 }
 
