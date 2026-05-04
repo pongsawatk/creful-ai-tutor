@@ -327,12 +327,12 @@
           card.appendChild(createEngineerCta());
         }
 
-        if (meta.kb_relevance !== undefined && meta.confidence !== undefined && meta.doc_id) {
-          card.appendChild(createCitationChip(meta));
-        }
-
         if (!meta.system) {
           card.appendChild(createFeedbackButtons(message));
+        }
+
+        if (meta.kb_relevance !== undefined && meta.confidence !== undefined && meta.doc_id) {
+          card.appendChild(createCitationChip(meta));
         }
 
         group.appendChild(card);
