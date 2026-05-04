@@ -70,7 +70,7 @@ button {
   top: 0;
   z-index: 10;
   display: grid;
-  grid-template-columns: 48px 1fr auto;
+  grid-template-columns: 48px minmax(0, 1fr);
   align-items: center;
   gap: 12px;
   min-height: 72px;
@@ -103,6 +103,7 @@ button {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
+  padding-right: 104px;
 }
 
 .brand-copy h1 {
@@ -121,10 +122,20 @@ button {
   line-height: 18px;
 }
 
+.session-actions {
+  position: absolute;
+  top: calc(10px + env(safe-area-inset-top));
+  right: 16px;
+  display: inline-grid;
+  grid-template-columns: auto 40px;
+  align-items: center;
+  justify-self: end;
+  gap: 8px;
+  min-width: 0;
+}
+
 .session-pill {
-  grid-column: 3;
-  grid-row: 1;
-  min-width: 54px;
+  min-width: 44px;
   min-height: 40px;
   padding: 8px 10px;
   border: 1px solid rgba(21, 101, 192, 0.22);
@@ -135,6 +146,40 @@ button {
   font-weight: 800;
   line-height: 22px;
   text-align: center;
+}
+
+.reset-session-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  background: var(--surface-container);
+  border: 2px solid var(--on-surface);
+  border-radius: var(--radius-sm);
+  box-shadow: 3px 3px 0 var(--secondary);
+  color: var(--primary);
+  cursor: pointer;
+  font-size: 22px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.reset-session-button:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--secondary);
+}
+
+.reset-session-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+  transform: none;
+  box-shadow: 3px 3px 0 rgba(255, 143, 0, 0.45);
+}
+
+.reset-session-button:focus-visible {
+  outline: 3px solid rgba(21, 101, 192, 0.35);
+  outline-offset: 3px;
 }
 
 .dev-badge {
@@ -524,18 +569,6 @@ button {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--tertiary);
   background: var(--citation-chip);
-}
-
-.cap-banner {
-  margin: 0 14px 8px;
-  padding: 12px 14px;
-  background: var(--warning-bg);
-  border: 2px solid var(--warning-border);
-  border-radius: var(--radius-sm);
-  color: #5D3B00;
-  font-size: 15px;
-  font-weight: 850;
-  line-height: 24px;
 }
 
 .composer-shell {

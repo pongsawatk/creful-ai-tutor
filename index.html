@@ -23,7 +23,12 @@
         <p>Creful Site Co-pilot</p>
       </div>
       <div class="dev-badge" id="devBadge" hidden>MOCK MODE — ยังไม่ต่อ n8n</div>
-      <div class="session-pill" id="sessionPill">0/50</div>
+      <div class="session-actions">
+        <div class="session-pill" id="sessionPill">0</div>
+        <button class="reset-session-button" id="resetSessionButton" type="button" aria-label="เริ่ม session ใหม่" title="เริ่ม session ใหม่">
+          ↻
+        </button>
+      </div>
     </header>
 
     <main class="chat-panel" id="chatPanel" aria-live="polite">
@@ -36,10 +41,6 @@
         <div class="quick-grid" id="quickGrid"></div>
       </section>
     </main>
-
-    <div class="cap-banner" id="capBanner" hidden>
-      📚 ครบ 50 คำถามต่อ session แล้วครับ — รีเฟรชหน้าเพื่อเริ่มใหม่
-    </div>
 
     <footer class="composer-shell">
       <div class="status-line" id="statusLine">🟢 พร้อมตอบ</div>
@@ -62,7 +63,6 @@
         N8N_WEBHOOK_URL: runtimeConfig.N8N_WEBHOOK_URL || "",
         KB_BASE_URL: runtimeConfig.KB_BASE_URL || "",
         SHEET_WEBHOOK_URL: runtimeConfig.SHEET_WEBHOOK_URL || "",
-        SESSION_MAX_QUESTIONS: Number(runtimeConfig.SESSION_MAX_QUESTIONS || 50),
         INPUT_MAX_LENGTH: Number(runtimeConfig.INPUT_MAX_LENGTH || 500)
       };
 
@@ -136,7 +136,7 @@
         devBadge: document.getElementById("devBadge"),
         statusLine: document.getElementById("statusLine"),
         sessionPill: document.getElementById("sessionPill"),
-        capBanner: document.getElementById("capBanner"),
+        resetSessionButton: document.getElementById("resetSessionButton"),
         toast: document.getElementById("toast")
       };
 
@@ -176,6 +176,7 @@
         elements.messageInput.addEventListener("input", autoGrowInput);
         elements.messageInput.addEventListener("paste", handlePaste);
         elements.messageInput.addEventListener("keydown", handleEnterKey);
+        elements.resetSessionButton.addEventListener("click", resetSession);
       }
 
       function handleEnterKey(event) {
@@ -215,9 +216,13 @@
       function getOrCreateSessionId() {
         const existing = localStorage.getItem(storageKeys.sessionId);
         if (existing) return existing;
-        const generated = `creful_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+        const generated = createSessionId();
         localStorage.setItem(storageKeys.sessionId, generated);
         return generated;
+      }
+
+      function createSessionId() {
+        return `creful_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
       }
 
       function readJson(key, fallback) {
@@ -452,11 +457,6 @@
       }
 
       async function sendText(text) {
-        if (state.userMessageCount >= config.SESSION_MAX_QUESTIONS) {
-          applySessionCap();
-          return;
-        }
-
         clearInput();
 
         if (state.mode === "AWAITING_NAME") {
@@ -488,14 +488,6 @@
         saveHistory();
         renderMessage(userMessage);
         updateSessionUi();
-
-        if (state.userMessageCount === Math.max(0, config.SESSION_MAX_QUESTIONS - 5)) {
-          showToast("⚠️ ใกล้ครบ 50 คำถามต่อ session แล้วครับ");
-        }
-
-        if (state.userMessageCount >= config.SESSION_MAX_QUESTIONS) {
-          applySessionCap();
-        }
 
         await callWebhook(text);
       }
@@ -760,12 +752,10 @@
       }
 
       function updateComposerState() {
-        const capped = state.userMessageCount >= config.SESSION_MAX_QUESTIONS;
-        elements.messageInput.disabled = state.isThinking || capped;
-        elements.sendButton.disabled = state.isThinking || capped;
-        if (capped) {
-          elements.messageInput.placeholder = "ครบจำนวนคำถามต่อ session แล้วครับ";
-        } else if (state.mode === "AWAITING_NAME") {
+        elements.messageInput.disabled = state.isThinking;
+        elements.sendButton.disabled = state.isThinking;
+        elements.resetSessionButton.disabled = state.isThinking;
+        if (state.mode === "AWAITING_NAME") {
           elements.messageInput.placeholder = "พิมพ์ชื่อเล่นครับ";
         } else {
           elements.messageInput.placeholder = "พิมพ์คำถามหน้างานครับ";
@@ -773,13 +763,31 @@
       }
 
       function updateSessionUi() {
-        elements.sessionPill.textContent = `${Math.min(state.userMessageCount, config.SESSION_MAX_QUESTIONS)}/${config.SESSION_MAX_QUESTIONS}`;
+        elements.sessionPill.textContent = `${state.userMessageCount}`;
       }
 
-      function applySessionCap() {
-        elements.capBanner.hidden = false;
+      function resetSession() {
+        if (state.isThinking) return;
+
+        state.sessionId = createSessionId();
+        state.history = [];
+        state.userMessageCount = 0;
+        state.mode = state.nickname ? "ACTIVE" : "AWAITING_NAME";
+
+        localStorage.setItem(storageKeys.sessionId, state.sessionId);
+        localStorage.removeItem(storageKeys.history);
+        localStorage.removeItem(storageKeys.userMessageCount);
+
+        Array.from(elements.chatPanel.querySelectorAll(".message-group")).forEach((node) => node.remove());
+        renderHistory();
+        if (state.mode === "AWAITING_NAME") {
+          renderNamePrompt();
+        }
         updateComposerState();
         updateSessionUi();
+        setStatus("default");
+        showToast("เริ่ม session ใหม่แล้วครับ");
+        elements.messageInput.focus();
       }
 
       function handlePaste(event) {
