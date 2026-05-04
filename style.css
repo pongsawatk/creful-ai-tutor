@@ -325,8 +325,8 @@ button {
 }
 
 .bot-card.is-escalated {
-  border-color: rgba(211, 47, 47, 0.45);
-  background: #FFF7F5;
+  border-color: rgba(21, 101, 192, 0.45);
+  background: #F3F8FF;
 }
 
 .bot-card.is-low-kb {
@@ -334,7 +334,14 @@ button {
   background: #FFFCEF;
 }
 
-.bot-card.is-error {
+.bot-card.is-escalated.is-low-kb {
+  border-color: rgba(21, 101, 192, 0.45);
+  background: #F3F8FF;
+}
+
+.bot-card.is-error,
+.bot-card.is-error.is-escalated,
+.bot-card.is-error.is-low-kb {
   border-color: rgba(211, 47, 47, 0.45);
   background: #FFF5F5;
 }
