@@ -1,0 +1,12 @@
+{
+  "doc_id": "Foreman_M1.3_S1_CoreConcept",
+  "title": "Foreman_M1.3_S1_CoreConcept",
+  "status": "in_review",
+  "module": "Module 1",
+  "type": "Concept",
+  "authority": "Medium",
+  "topic_tags": [],
+  "source_url": "https://www.notion.so/Foreman_M1-3_S1_CoreConcept-6feeeb2f3eca46159c4ae21197347ab8",
+  "content": "```json\n{\n  \"module\": \"M1.3\",\n  \"module_title\": \"Inside Interior Drawings\",\n  \"section\": \"1. Core Concept\",\n  \"subsection\": null,\n  \"tags\": [\"map-mindset\", \"list-of-drawings\", \"drawing-set-structure\"],\n  \"level\": \"intermediate\"\n}\n```\n\n## 1. Core Concept (หลักการและใจความสำคัญ)\n\n- **Definition:** การทำความเข้าใจ \"โครงสร้าง\" และ \"การจัดหมวดหมู่\" ของชุดแบบก่อสร้างตกแต่งภายใน (Interior Drawing Set) ตั้งแต่หน้าสารบัญไปจนถึงหน้าสุดท้าย\n\n- **Goal:** เพื่อให้ Foreman สามารถ \"ค้นหาข้อมูล\" ได้อย่างรวดเร็ว รู้ว่าต้องเปิดหาข้อมูลเรื่องอะไรในหมวดไหน และเข้าใจบทบาทของแบบแต่ละประเภท\n\n## The \"Map\" Mindset (แผนที่ต้องมีติดหัว)\n\nหน้า **List of Drawings (สารบัญแบบ)** เปรียบเสมือน \"แผนที่\" ของชุดแบบ\n\nForeman ที่ดีต้องอ่านสารบัญก่อนเริ่มงานเสมอ เพื่อเช็คว่า:\n\n- \"เรามีข้อมูลอะไรอยู่ในมือบ้าง?\" — มี Plan กี่ชุด, Elevation กี่แผ่น, Detail อะไรบ้าง\n\n- \"อะไรที่ขาดหายไป?\" — ห้องพิเศษยังไม่มี Special Room Detail / Joinery บางรหัสยังไม่มี Detail\n\nถ้าข้อมูลขาด → ออก RFI ขอเพิ่ม **ก่อน** สั่งงานช่าง — ไม่ใช่รอจนเจอปัญหาหน้างานแล้วค่อยถาม\n\n## ทำไมต้องมองแบบเป็น Map?\n\nชุดแบบ Interior ประกอบด้วยแผ่นขนาด A1/A0 หลายสิบถึงหลายร้อยแผ่น ถ้า Foreman ไม่รู้โครงสร้างชุดแบบ:\n\n- จะเปิดปิดไปมาหา Detail ของตู้ไม่เจอ\n\n- สั่งช่างทำงานขึ้นตาม Plan รวม โดยยังไม่รู้ว่ามี Special Room Detail ของห้องนั้นแยกอยู่ → ต้องรื้อทำใหม่\n\n- สั่งของผิดเพราะประกอบจากรหัส Joinery ผิด\n\n## Cross-Module Reference\n\n- จะเชื่อมจาก [Foreman_M1.2_TypesOfDrawingsAndSiteMgmt](https://www.notion.so/f5851a08e0594cc3b61f677e74e06abd) (สถานะ Tender/IFC/Shop/As-built และ Discipline ID/Arch/MEP)\n\n- ตัวลำดับเอกสาร (Spec/IFC/BOQ/Detail) ดูได้ที่ [Foreman_M1.0_GlossaryAndDocPriority](https://www.notion.so/402d28b22037422fa6e8d62e7080a076)\n\n---\n\n→ ต่อ: **Section 2 Anatomy** — ชุดแบบ Interior มาตรฐานแบ่งเป็น 6 หมวดเรียงจากภาพกว้าง (Plan) → จุดเล็ก (Detail) → ภาพจบ (Perspective) — เริ่มจาก Group 1: General & Plans ที่เป็นผังพื้นและตำแหน่ง",
+  "updated_at": "2026-05-02T09:16:00.000Z"
+}
