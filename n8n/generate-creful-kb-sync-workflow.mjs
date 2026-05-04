@@ -10,7 +10,8 @@ const workflow = {
       parameters: {
         httpMethod: 'POST',
         path: 'creful-kb-sync',
-        responseMode: 'responseNode',
+        responseMode: 'lastNode',
+        responseData: 'firstEntryJson',
         options: {}
       },
       id: randomUUID(),
@@ -30,18 +31,6 @@ const workflow = {
       type: 'n8n-nodes-base.code',
       typeVersion: 2,
       position: [520, 300]
-    },
-    {
-      parameters: {
-        respondWith: 'json',
-        responseBody: '={{ $json }}',
-        options: {}
-      },
-      id: randomUUID(),
-      name: 'Respond - Sync Summary',
-      type: 'n8n-nodes-base.respondToWebhook',
-      typeVersion: 1.1,
-      position: [780, 300]
     }
   ],
   pinData: {},
@@ -51,17 +40,6 @@ const workflow = {
         [
           {
             node: 'Code - Creful KB Sync',
-            type: 'main',
-            index: 0
-          }
-        ]
-      ]
-    },
-    'Code - Creful KB Sync': {
-      main: [
-        [
-          {
-            node: 'Respond - Sync Summary',
             type: 'main',
             index: 0
           }
