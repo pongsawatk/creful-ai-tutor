@@ -6,6 +6,9 @@
   <meta name="theme-color" content="#1565C0">
   <meta name="description" content="ครูช่าง AI สำหรับหัวหน้าช่าง LAS">
   <title>ครูช่าง AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap">
   <link rel="stylesheet" href="style.css">
   <script src="config.js"></script>
 </head>
@@ -172,6 +175,27 @@
         elements.composerForm.addEventListener("submit", handleSubmit);
         elements.messageInput.addEventListener("input", autoGrowInput);
         elements.messageInput.addEventListener("paste", handlePaste);
+        elements.messageInput.addEventListener("keydown", handleEnterKey);
+      }
+
+      function handleEnterKey(event) {
+        if (event.key !== "Enter" || event.isComposing) return;
+        if (!isDesktopPointer()) return;
+        if (event.altKey || event.shiftKey) return;
+        event.preventDefault();
+        if (typeof elements.composerForm.requestSubmit === "function") {
+          elements.composerForm.requestSubmit();
+        } else {
+          handleSubmit(new Event("submit", { cancelable: true }));
+        }
+      }
+
+      function isDesktopPointer() {
+        try {
+          return window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+        } catch {
+          return false;
+        }
       }
 
       function applyUrlParams() {
@@ -258,34 +282,109 @@
         const group = document.createElement("article");
         group.className = `message-group ${message.role === "user" ? "is-user" : "is-bot"}`;
 
-        if (message.role === "bot" && message.meta?.kb_relevance < 50) {
-          group.appendChild(createTrustWarning());
+        if (message.role === "user") {
+          const bubble = document.createElement("div");
+          bubble.className = "bubble";
+          bubble.textContent = message.content || "";
+          group.appendChild(bubble);
+          elements.chatPanel.appendChild(group);
+          toggleEmptyState();
+          scrollToBottom();
+          return;
+        }
+
+        const meta = message.meta || {};
+        const card = document.createElement("div");
+        card.className = "bot-card";
+        if (meta.error) card.classList.add("is-error");
+        if (meta.escalated) card.classList.add("is-escalated");
+        if (meta.kb_relevance !== undefined && meta.kb_relevance < 50) {
+          card.classList.add("is-low-kb");
+          card.appendChild(createTrustWarning());
         }
 
         const bubble = document.createElement("div");
         bubble.className = "bubble";
-        bubble.textContent = message.content || "";
-        group.appendChild(bubble);
+        renderRichText(bubble, message.content || "");
 
-        if (message.role === "bot") {
-          const meta = message.meta || {};
-          if (meta.kb_relevance !== undefined && meta.confidence !== undefined && meta.doc_id) {
-            group.appendChild(createCitationChip(meta));
-          }
-          if (meta.showEngineerCta) {
-            group.appendChild(createEngineerCta());
-          }
-          if (meta.escalated) {
-            group.appendChild(createEscalationCard(meta.escalate_reason || "ต้องให้ Trainer ตรวจสอบ"));
-          }
-          if (!meta.system) {
-            group.appendChild(createFeedbackButtons(message));
-          }
+        if (meta.escalated && meta.escalate_reason) {
+          const extra = document.createElement("div");
+          extra.className = "extra-info";
+          const intro = document.createElement("p");
+          intro.className = "extra-info-intro";
+          intro.textContent = "ℹ️ ครูช่างขอให้ข้อมูลเพิ่มเติมจากฐานความรู้ Creful ว่า";
+          extra.appendChild(intro);
+          const body = document.createElement("div");
+          body.className = "extra-info-body";
+          renderRichText(body, meta.escalate_reason);
+          extra.appendChild(body);
+          bubble.appendChild(extra);
         }
 
+        card.appendChild(bubble);
+
+        if (meta.showEngineerCta) {
+          card.appendChild(createEngineerCta());
+        }
+
+        if (meta.kb_relevance !== undefined && meta.confidence !== undefined && meta.doc_id) {
+          card.appendChild(createCitationChip(meta));
+        }
+
+        if (!meta.system) {
+          card.appendChild(createFeedbackButtons(message));
+        }
+
+        group.appendChild(card);
         elements.chatPanel.appendChild(group);
         toggleEmptyState();
         scrollToBottom();
+      }
+
+      function renderRichText(container, text) {
+        const escaped = escapeHtml(text || "").trim();
+        if (!escaped) {
+          container.textContent = "";
+          return;
+        }
+        const blocks = escaped.split(/\n{2,}/);
+        const html = blocks.map(renderBlock).join("");
+        container.innerHTML = html;
+      }
+
+      function renderBlock(block) {
+        const lines = block.split(/\n/);
+        const isOrderedList = lines.every((line) => /^\s*\d+[.)]\s+/.test(line));
+        const isBulletList = lines.every((line) => /^\s*[-*•]\s+/.test(line));
+
+        if (isOrderedList && lines.length > 1) {
+          const items = lines.map((line) => `<li>${formatInline(line.replace(/^\s*\d+[.)]\s+/, ""))}</li>`).join("");
+          return `<ol>${items}</ol>`;
+        }
+        if (isBulletList && lines.length > 1) {
+          const items = lines.map((line) => `<li>${formatInline(line.replace(/^\s*[-*•]\s+/, ""))}</li>`).join("");
+          return `<ul>${items}</ul>`;
+        }
+        const inline = lines.map(formatInline).join("<br>");
+        return `<p>${inline}</p>`;
+      }
+
+      function formatInline(text) {
+        return text
+          .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+          .replace(/__([^_]+)__/g, "<strong>$1</strong>")
+          .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;\]]|$)/g, "$1<em>$2</em>")
+          .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?:;\]]|$)/g, "$1<em>$2</em>")
+          .replace(/`([^`]+)`/g, "<code>$1</code>");
+      }
+
+      function escapeHtml(text) {
+        return String(text)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;")
+          .replace(/'/g, "&#39;");
       }
 
       function createTrustWarning() {
@@ -307,19 +406,6 @@
         chip.className = "engineer-chip";
         chip.textContent = "🧑‍💼 ตรวจกับวิศวกรก่อนใช้จริง";
         return chip;
-      }
-
-      function createEscalationCard(reason) {
-        const card = document.createElement("div");
-        card.className = "escalation-card";
-        const text = document.createElement("p");
-        text.textContent = `⚠️ ส่งต่อให้ Trainer แล้วครับ — เหตุผล: ${reason}`;
-        const dismiss = document.createElement("button");
-        dismiss.type = "button";
-        dismiss.textContent = "ปิดครับ";
-        dismiss.addEventListener("click", () => card.remove());
-        card.append(text, dismiss);
-        return card;
       }
 
       function createFeedbackButtons(message) {

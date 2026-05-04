@@ -27,15 +27,18 @@
 
 html {
   min-width: 320px;
+  height: 100%;
   background: var(--surface);
   color: var(--on-surface);
-  font-family: "Noto Sans Thai", "Inter", system-ui, sans-serif;
+  font-family: "Sarabun", "Noto Sans Thai", "IBM Plex Sans Thai", "Inter", system-ui, sans-serif;
   -webkit-text-size-adjust: 100%;
 }
 
 body {
+  height: 100dvh;
   min-height: 100dvh;
   margin: 0;
+  overflow: hidden;
   background:
     linear-gradient(180deg, #EAF3FF 0, #FAFAFA 220px),
     var(--surface);
