@@ -1,0 +1,12 @@
+{
+  "doc_id": "Foreman_M1.3_S2.G2_Elevations",
+  "title": "Foreman_M1.3_S2.G2_Elevations",
+  "status": "in_review",
+  "module": "Module 1",
+  "type": "Reference",
+  "authority": "Medium",
+  "topic_tags": [],
+  "source_url": "https://www.notion.so/Foreman_M1-3_S2-G2_Elevations-884e7f4587f34f70bb4f48cc46dea042",
+  "content": "```json\n{\n  \"module\": \"M1.3\",\n  \"module_title\": \"Inside Interior Drawings\",\n  \"section\": \"2. Anatomy\",\n  \"subsection\": \"Group 2: Elevations\",\n  \"tags\": [\"elevation\", \"wall-heights\", \"outlet-levels\", \"skirting\", \"decorative-wall\"],\n  \"level\": \"intermediate\"\n}\n```\n\n← จาก: Group 1 บอก Plan ระบุ \"ตำแหน่ง\" และ \"ปริมาณ\" แต่ไม่รู้ \"ความสูง\" — Group 2 Elevations จะตอบตรงนี้\n\n## Group 2: Elevations (หมวดรูปด้าน - ภาพรวมแนวดิ่ง)\n\nเป็นส่วนที่ระบุ \"ความสูง\" และ \"หน้าตาของผนัง\"\n\n## อ่าน Elevation ได้อะไรบ้าง\n\nแสดงภาพด้านข้างของผนังแต่ละด้านในห้อง — ใช้ดู:\n\n- **ความสูงฝ้าเพดาน** (Ceiling Height) + ระดับฝ้าหลุม (Drop Ceiling)\n\n- **ระดับปลั๊กไฟ** (Outlet Height) — สำคัญมากเพราะส่งผลต่อการไม่จมปลั๊กใต้เฟอร์\n\n- **ระดับสวิตช์ไฟ** (Switch Height) — มาตรฐานมัก 1.10–1.20 ม. ตรวจ Spec/Designer\n\n- **ลวดลายผนังตกแต่ง** (Decorative Wall Pattern) — ไม้รองช่อง/ลายกระเบื้อง/ปรินต์\n\n- **บัวเชิงผนัง** (Skirting) — ชนิด / ความสูง / วิธีจบมุม\n\n- **ตำแหน่งอุปกรณ์ติดผนัง** — ทีวี, รูป, ชั้นวางของ\n\n## วิธีอ่าน Elevation คู่กับ Plan\n\nตอนเห็นสัญลักษณ์ **E-01, E-02, E-03** บนผนังใน Floor Plan:\n\n1. สัญลักษณ์ตัว **ลูกศรชี้ผนัง** → บอกทิศทางที่ไปยืนมองตอนวาด\n\n1. เปิดหน้า Elevation ตามรหัส (E-01)\n\n1. ตรวจสอบระดับต่าง ๆ ตามข้างต้น\n\n## Common Pitfall ของ Elevation\n\n- ช่างทำผนังตามระยะใน Plan เสร็จ → ไม่ได้เช็ค Elevation พบปลั๊กไฟอยู่จุดที่ไม่ตรงกับ Built-in → จมหลังตู้\n\n- สั่งผลิตลวดลายผนังไม้ขึ้นตาม Plan ยอดรวม → ลายไม้ไม่ Match ระหว่างแผ่น → ต้อง Elevation เท่านั้นถึงจะเห็น Joint Layout\n\n- ไม่ Cross-check ระดับ Outlet กับระดับโต๊ะ/ตู้ → ปลั๊กอยู่หลัง Built-in → ใช้งานยาก\n\n## Connection ไป Detail\n\nElevation บอกแค่ \"หน้าตา\" ต้องไปต่อ **Section / Detail** เพื่อดู \"ไส้ใน\":\n\n- รอยต่อผนัง-ฝ้า\n\n- การซ่อนไฟในฝ้าหลุม\n\n- ฟิลลี่หลังผนังตกแต่ง\n\n---\n\n→ ต่อ: **Group 3 Details** — จากหน้าตาผนัง (Elevation) ลงลึกไปไส้ใน (Detail) — บอก \"วิธีทำ\" ของรอยต่อ/มุมจบ/โครงสร้างภายใน — แบ่งย่อย 4 หมวด: Partition / Door-Window / Ceiling / Floor",
+  "updated_at": "2026-05-02T09:16:00.000Z"
+}
