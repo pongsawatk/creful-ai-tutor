@@ -365,6 +365,7 @@
         let paragraphLines = [];
         let listType = "";
         let listItems = [];
+        let listStart = null;
 
         const flushParagraph = () => {
           if (!paragraphLines.length) return;
@@ -377,13 +378,15 @@
         const flushList = () => {
           if (!listItems.length) return;
           const tag = listType === "ol" ? "ol" : "ul";
-          html += `<${tag}>${listItems.map((item) => `<li>${formatInline(item)}</li>`).join("")}</${tag}>`;
+          const startAttr = tag === "ol" && listStart && listStart > 1 ? ` start="${listStart}"` : "";
+          html += `<${tag}${startAttr}>${listItems.map((item) => `<li>${formatInline(item)}</li>`).join("")}</${tag}>`;
           listType = "";
           listItems = [];
+          listStart = null;
         };
 
         lines.forEach((line) => {
-          const ordered = line.match(/^\s*\d+[.)]\s+(.+)$/);
+          const ordered = line.match(/^\s*(\d+)[.)]\s+(.+)$/);
           const choice = line.match(/^\s*([A-D])[.)]\s+(.+)$/);
           const bullet = line.match(/^\s*[-*•]\s+(.+)$/);
 
@@ -391,8 +394,9 @@
             const nextType = ordered ? "ol" : "ul";
             flushParagraph();
             if (listType && listType !== nextType) flushList();
+            if (!listType && ordered) listStart = Number(ordered[1]);
             listType = nextType;
-            listItems.push(choice ? `${choice[1]}) ${choice[2]}` : (ordered ? ordered[1] : bullet[1]));
+            listItems.push(choice ? `${choice[1]}) ${choice[2]}` : (ordered ? ordered[2] : bullet[1]));
             return;
           }
 
