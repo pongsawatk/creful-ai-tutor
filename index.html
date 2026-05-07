@@ -466,26 +466,53 @@
         feedback.className = "feedback-row";
         const meta = message?.meta || {};
         [
-          ["understood", "👍 เข้าใจ"],
-          ["unclear", "👎 ยังไม่ชัด"],
-          ["example", "🧩 Example"],
-          ["report_wrong", "📝 แจ้งผิด"]
-        ].forEach(([type, label]) => {
+          {
+            type: "understood",
+            label: "👍 เข้าใจแล้ว",
+            toast: "ดีเลยครับ บันทึกว่าเข้าใจแล้ว"
+          },
+          {
+            type: "unclear",
+            label: "🔁 อธิบายใหม่",
+            prompt: "คำตอบเมื่อกี้ยังไม่ชัดครับ ช่วยอธิบายใหม่ให้ง่ายขึ้น เป็นภาษาไทยหน้างาน และสรุปเป็นขั้นตอนสั้น ๆ ครับ",
+            toast: "ขอให้ครูช่างอธิบายใหม่ครับ"
+          },
+          {
+            type: "example",
+            label: "🧩 ขอตัวอย่าง",
+            prompt: "ช่วยยกตัวอย่างหน้างานจากคำตอบเมื่อกี้ 1 ตัวอย่าง พร้อมวิธีคิดแบบหัวหน้าช่างครับ",
+            toast: "ขอตัวอย่างหน้างานครับ"
+          },
+          {
+            type: "report_wrong",
+            label: "📝 คำตอบผิด",
+            toast: "รับแจ้งแล้วครับ ทีมจะใช้ข้อมูลนี้ตรวจคำตอบ"
+          }
+        ].forEach((action) => {
           const button = document.createElement("button");
           button.type = "button";
           button.className = "feedback-button";
-          button.textContent = label;
+          button.textContent = action.label;
           button.addEventListener("click", () => {
+            if (state.isThinking) {
+              showToast("รอคำตอบปัจจุบันจบก่อนครับ");
+              return;
+            }
+
             button.classList.add("is-selected");
             logEvent("feedback", {
               message_id: message?.id,
-              feedback_type: type,
+              feedback_type: action.type,
               doc_id: meta.doc_id || "",
               kb_relevance: meta.kb_relevance,
               confidence: meta.confidence,
               model: meta.model || ""
             });
-            showToast("บันทึก feedback แล้วครับ");
+            showToast(action.toast);
+
+            if (action.prompt) {
+              sendText(action.prompt);
+            }
           });
           feedback.appendChild(button);
         });
