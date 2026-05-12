@@ -29,7 +29,16 @@ var LOG_HEADERS = [
   'usage_completion_tokens',
   'usage_total_tokens',
   'response_cost',
-  'feedback_type'
+  'feedback_type',
+  'event',
+  'message_id',
+  'feedback_label',
+  'feedback_action',
+  'review_status',
+  'issue_category',
+  'reviewer_note',
+  'kb_update_candidate',
+  'eval_case_status'
 ];
 
 var DAILY_HEADERS = [
@@ -46,7 +55,10 @@ var DAILY_HEADERS = [
   'citation_parse_failed_count',
   'low_kb_count',
   'report_wrong_count',
-  'updated_at'
+  'updated_at',
+  'understood_count',
+  'unclear_count',
+  'example_request_count'
 ];
 
 function doPost(e) {
@@ -117,7 +129,10 @@ function dailyRollup() {
     escalatedCount: 0,
     citationParseFailedCount: 0,
     lowKbCount: 0,
-    reportWrongCount: 0
+    reportWrongCount: 0,
+    understoodCount: 0,
+    unclearCount: 0,
+    exampleRequestCount: 0
   };
 
   for (var i = 1; i < values.length; i += 1) {
@@ -150,34 +165,48 @@ function dailyRollup() {
       stats.students[studentId] = true;
     }
 
-    if (responseTime !== null) {
-      stats.responseSum += responseTime;
-      stats.responseCount += 1;
-    }
-
-    if (kbRelevance !== null) {
-      stats.kbSum += kbRelevance;
-      stats.kbCount += 1;
-      if (kbRelevance < 50) {
-        stats.lowKbCount += 1;
+    if (!feedbackType) {
+      if (responseTime !== null) {
+        stats.responseSum += responseTime;
+        stats.responseCount += 1;
       }
-    }
 
-    if (confidence !== null) {
-      stats.confidenceSum += confidence;
-      stats.confidenceCount += 1;
-    }
+      if (kbRelevance !== null) {
+        stats.kbSum += kbRelevance;
+        stats.kbCount += 1;
+        if (kbRelevance < 50) {
+          stats.lowKbCount += 1;
+        }
+      }
 
-    if (toBoolean_(getCell_(row, headerMap, 'escalated'))) {
-      stats.escalatedCount += 1;
-    }
+      if (confidence !== null) {
+        stats.confidenceSum += confidence;
+        stats.confidenceCount += 1;
+      }
 
-    if (toBoolean_(getCell_(row, headerMap, 'citation_parse_failed'))) {
-      stats.citationParseFailedCount += 1;
+      if (toBoolean_(getCell_(row, headerMap, 'escalated'))) {
+        stats.escalatedCount += 1;
+      }
+
+      if (toBoolean_(getCell_(row, headerMap, 'citation_parse_failed'))) {
+        stats.citationParseFailedCount += 1;
+      }
     }
 
     if (feedbackType === 'report_wrong') {
       stats.reportWrongCount += 1;
+    }
+
+    if (feedbackType === 'understood') {
+      stats.understoodCount += 1;
+    }
+
+    if (feedbackType === 'unclear') {
+      stats.unclearCount += 1;
+    }
+
+    if (feedbackType === 'example') {
+      stats.exampleRequestCount += 1;
     }
   }
 
@@ -208,6 +237,21 @@ function setup() {
     trigger: 'dailyRollup',
     hour: 1,
     timezone: TIMEZONE
+  };
+}
+
+function updateFeedbackReviewSchema() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  getOrCreateSheet_(ss, LOG_SHEET_NAME, LOG_HEADERS);
+  getOrCreateSheet_(ss, DAILY_SHEET_NAME, DAILY_HEADERS);
+
+  return {
+    ok: true,
+    logs_sheet: LOG_SHEET_NAME,
+    daily_sheet: DAILY_SHEET_NAME,
+    log_columns: LOG_HEADERS.length,
+    daily_columns: DAILY_HEADERS.length,
+    updated_at: new Date().toISOString()
   };
 }
 
@@ -262,7 +306,20 @@ function buildLogRow_(payload) {
     usage_completion_tokens: firstValue_(payload.usage_completion_tokens, payload.usageCompletionTokens, ''),
     usage_total_tokens: firstValue_(payload.usage_total_tokens, payload.usageTotalTokens, ''),
     response_cost: firstValue_(payload.response_cost, payload.responseCost, ''),
-    feedback_type: firstValue_(payload.feedback_type, payload.feedbackType, '')
+    feedback_type: firstValue_(payload.feedback_type, payload.feedbackType, ''),
+    event: firstValue_(payload.event, ''),
+    message_id: firstValue_(payload.message_id, payload.messageId, ''),
+    feedback_label: firstValue_(payload.feedback_label, payload.feedbackLabel, ''),
+    feedback_action: firstValue_(payload.feedback_action, payload.feedbackAction, ''),
+    review_status: firstValue_(
+      payload.review_status,
+      payload.reviewStatus,
+      firstValue_(payload.feedback_type, payload.feedbackType, '') ? 'new' : ''
+    ),
+    issue_category: firstValue_(payload.issue_category, payload.issueCategory, ''),
+    reviewer_note: firstValue_(payload.reviewer_note, payload.reviewerNote, ''),
+    kb_update_candidate: firstValue_(payload.kb_update_candidate, payload.kbUpdateCandidate, ''),
+    eval_case_status: firstValue_(payload.eval_case_status, payload.evalCaseStatus, '')
   };
 
   return LOG_HEADERS.map(function(header) {
@@ -400,7 +457,10 @@ function buildEmptyDailyRow_(dateString) {
     0,
     0,
     0,
-    new Date().toISOString()
+    new Date().toISOString(),
+    0,
+    0,
+    0
   ];
 }
 
@@ -419,7 +479,10 @@ function buildDailyRow_(stats) {
     stats.citationParseFailedCount,
     stats.lowKbCount,
     stats.reportWrongCount,
-    new Date().toISOString()
+    new Date().toISOString(),
+    stats.understoodCount,
+    stats.unclearCount,
+    stats.exampleRequestCount
   ];
 }
 

@@ -469,23 +469,27 @@
           {
             type: "understood",
             label: "👍 เข้าใจแล้ว",
-            toast: "ดีเลยครับ บันทึกว่าเข้าใจแล้ว"
+            action: "log_positive",
+            toast: "บันทึกว่าเข้าใจแล้วครับ"
           },
           {
             type: "unclear",
             label: "🔁 อธิบายใหม่",
+            action: "request_rewrite",
             prompt: "คำตอบเมื่อกี้ยังไม่ชัดครับ ช่วยอธิบายใหม่ให้ง่ายขึ้น เป็นภาษาไทยหน้างาน และสรุปเป็นขั้นตอนสั้น ๆ ครับ",
-            toast: "ขอให้ครูช่างอธิบายใหม่ครับ"
+            toast: "ให้ครูช่างอธิบายใหม่ครับ"
           },
           {
             type: "example",
             label: "🧩 ขอตัวอย่าง",
+            action: "request_example",
             prompt: "ช่วยยกตัวอย่างหน้างานจากคำตอบเมื่อกี้ 1 ตัวอย่าง พร้อมวิธีคิดแบบหัวหน้าช่างครับ",
             toast: "ขอตัวอย่างหน้างานครับ"
           },
           {
             type: "report_wrong",
             label: "📝 คำตอบผิด",
+            action: "trainer_review",
             toast: "รับแจ้งแล้วครับ ทีมจะใช้ข้อมูลนี้ตรวจคำตอบ"
           }
         ].forEach((action) => {
@@ -503,6 +507,11 @@
             logEvent("feedback", {
               message_id: message?.id,
               feedback_type: action.type,
+              feedback_label: action.label,
+              feedback_action: action.action,
+              question: findQuestionForBotMessage(message),
+              answer: message?.content || "",
+              trace_id: meta.trace_id || "",
               doc_id: meta.doc_id || "",
               kb_relevance: meta.kb_relevance,
               confidence: meta.confidence,
@@ -517,6 +526,19 @@
           feedback.appendChild(button);
         });
         return feedback;
+      }
+
+      function findQuestionForBotMessage(message) {
+        const messageIndex = state.history.findIndex((item) => item.id === message?.id);
+        const searchFrom = messageIndex >= 0 ? messageIndex - 1 : state.history.length - 1;
+
+        for (let index = searchFrom; index >= 0; index -= 1) {
+          if (state.history[index]?.role === "user") {
+            return state.history[index].content || "";
+          }
+        }
+
+        return "";
       }
 
       function toggleEmptyState() {
@@ -740,6 +762,7 @@
             confidence,
             doc_id: citation?.doc_id,
             model: isObject ? raw.model : "",
+            trace_id: isObject ? raw.trace_id : "",
             escalated,
             escalate_reason: escalateReason,
             kb_hint: kbHint,
