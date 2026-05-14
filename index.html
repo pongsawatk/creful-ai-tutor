@@ -383,7 +383,7 @@
           card.appendChild(createEngineerCta());
         }
 
-        if (meta.kb_relevance !== undefined && meta.confidence !== undefined && meta.doc_id) {
+        if (meta.kb_relevance !== undefined && meta.confidence !== undefined && getDocIds(meta).length > 0) {
           card.appendChild(createCitationChip(meta));
         }
 
@@ -500,6 +500,7 @@
       function createCitationChip(meta) {
         const chip = document.createElement("div");
         chip.className = `citation-chip ${meta.kb_relevance < 50 ? "is-warning" : ""}`;
+        const docIds = getDocIds(meta);
 
         [
           {
@@ -509,10 +510,6 @@
           {
             text: `🎯 ${meta.confidence}%`,
             tooltip: "คะแนนความมั่นใจของคำตอบ"
-          },
-          {
-            text: `🔗 ${meta.doc_id}`,
-            tooltip: "แหล่งอ้างอิงจาก KB"
           }
         ].forEach((item, index) => {
           if (index > 0) {
@@ -531,7 +528,45 @@
           chip.appendChild(part);
         });
 
+        docIds.forEach((docId) => {
+          const separator = document.createElement("span");
+          separator.className = "citation-separator";
+          separator.textContent = "|";
+          chip.appendChild(separator);
+
+          const part = document.createElement("span");
+          part.className = "citation-part citation-ref has-tooltip";
+          part.textContent = `🔗 ${docId}`;
+          part.title = "แหล่งอ้างอิงจาก KB";
+          part.dataset.tooltip = "แหล่งอ้างอิงจาก KB";
+          part.dataset.tooltipPlacement = "top";
+          chip.appendChild(part);
+        });
+
         return chip;
+      }
+
+      function getDocIds(meta) {
+        if (Array.isArray(meta?.doc_ids)) {
+          return uniqueStrings(meta.doc_ids);
+        }
+
+        return uniqueStrings(String(meta?.doc_id || "")
+          .split(/[,，;；]+|\s+\+\s+|\s+และ\s+/u));
+      }
+
+      function uniqueStrings(values) {
+        const seen = new Set();
+        const result = [];
+
+        values.forEach((value) => {
+          const text = String(value || "").trim();
+          if (!text || seen.has(text)) return;
+          seen.add(text);
+          result.push(text);
+        });
+
+        return result;
       }
 
       function createEngineerCta() {
@@ -600,6 +635,8 @@
               answer: message?.content || "",
               trace_id: meta.trace_id || "",
               doc_id: meta.doc_id || "",
+              doc_ids: getDocIds(meta),
+              reference_count: getDocIds(meta).length,
               kb_relevance: meta.kb_relevance,
               confidence: meta.confidence,
               model: meta.model || ""
@@ -943,11 +980,13 @@
           ? {
               kb_relevance: Number(raw.kb_relevance),
               confidence: Number(raw.confidence),
-              doc_id: String(raw.doc_id)
+              doc_id: String(raw.doc_id || ""),
+              doc_ids: Array.isArray(raw.doc_ids) ? raw.doc_ids.map(String) : undefined
             }
           : null;
 
         const citation = structuredCitation || parsedCitation.citation;
+        const docIds = citation ? uniqueStrings(citation.doc_ids || [citation.doc_id]) : [];
         const citationParseFailed = !citation && !structuredCitation;
         const escalated = Boolean(isObject && raw.escalate) || parsedEscalation.escalated;
         const escalateReason = String((isObject && raw.escalate_reason) || parsedEscalation.reason || "");
@@ -963,7 +1002,9 @@
           meta: {
             kb_relevance: kbRelevance,
             confidence,
-            doc_id: citation?.doc_id,
+            doc_id: docIds[0] || citation?.doc_id,
+            doc_ids: docIds,
+            reference_count: docIds.length,
             model: isObject ? raw.model : "",
             trace_id: isObject ? raw.trace_id : "",
             escalated,
@@ -998,7 +1039,9 @@
       }
 
       function hasStructuredCitation(raw) {
-        return raw.kb_relevance !== undefined && raw.confidence !== undefined && raw.doc_id !== undefined;
+        return raw.kb_relevance !== undefined
+          && raw.confidence !== undefined
+          && (raw.doc_id !== undefined || raw.doc_ids !== undefined);
       }
 
       function parseCitation(answer) {
@@ -1011,7 +1054,8 @@
           citation: {
             kb_relevance: Number(match[1]),
             confidence: Number(match[2]),
-            doc_id: match[3].trim()
+            doc_id: uniqueStrings(match[3].split(/[,，;；]+|\s+\+\s+|\s+และ\s+/u))[0] || match[3].trim(),
+            doc_ids: uniqueStrings(match[3].split(/[,，;；]+|\s+\+\s+|\s+และ\s+/u))
           }
         };
       }
@@ -1049,6 +1093,8 @@
           kb_relevance: botMessage.meta?.kb_relevance,
           confidence: botMessage.meta?.confidence,
           doc_id: botMessage.meta?.doc_id,
+          doc_ids: getDocIds(botMessage.meta),
+          reference_count: getDocIds(botMessage.meta).length,
           model: botMessage.meta?.model,
           escalated: Boolean(botMessage.meta?.escalated),
           escalate_reason: botMessage.meta?.escalate_reason || "",

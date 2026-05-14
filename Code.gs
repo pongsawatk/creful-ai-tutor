@@ -16,6 +16,8 @@ var LOG_HEADERS = [
   'kb_relevance',
   'confidence',
   'doc_id',
+  'doc_ids',
+  'reference_count',
   'model',
   'escalated',
   'escalate_reason',
@@ -293,6 +295,8 @@ function buildLogRow_(payload) {
     kb_relevance: firstValue_(payload.kb_relevance, payload.kbRelevance, ''),
     confidence: firstValue_(payload.confidence, ''),
     doc_id: firstValue_(payload.doc_id, payload.docId, ''),
+    doc_ids: normalizeDocIdsForSheet_(firstValue_(payload.doc_ids, payload.docIds, payload.doc_id, payload.docId, '')),
+    reference_count: firstValue_(payload.reference_count, payload.referenceCount, countDocIds_(payload.doc_ids || payload.docIds || payload.doc_id || payload.docId)),
     model: firstValue_(payload.model, ''),
     escalated: valueOrBlank_(payload.escalated),
     escalate_reason: firstValue_(payload.escalate_reason, payload.escalateReason, ''),
@@ -402,6 +406,43 @@ function firstValue_() {
     }
   }
   return '';
+}
+
+function normalizeDocIdsForSheet_(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .map(function(item) {
+        return String(item || '').trim();
+      })
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  return String(value || '').trim();
+}
+
+function countDocIds_(value) {
+  if (value === null || value === undefined || value === '') {
+    return '';
+  }
+
+  if (Array.isArray(value)) {
+    return value.filter(function(item) {
+      return String(item || '').trim() !== '';
+    }).length;
+  }
+
+  return String(value)
+    .split(/[,，;；]+|\s+\+\s+|\s+และ\s+/)
+    .map(function(item) {
+      return item.trim();
+    })
+    .filter(Boolean)
+    .length;
 }
 
 function buildHeaderMap_(headers) {
