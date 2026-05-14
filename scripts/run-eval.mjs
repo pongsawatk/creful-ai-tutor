@@ -2,7 +2,7 @@
 /*
 README snippet
 
-Step 7 smoke/adversarial eval harness for LAS Foreman AI Tutor.
+Step 7 smoke/adversarial eval harness for CrefulLab Foreman Assistant.
 
 Usage:
   CREFUL_WEBHOOK_URL="https://your-n8n-webhook" node scripts/run-eval.mjs
@@ -510,7 +510,7 @@ async function main() {
     return 0;
   }
 
-  console.log('LAS Foreman AI Tutor Step 7 eval runner');
+  console.log('CrefulLab Foreman Assistant Step 7 eval runner');
   console.log(`Cases: ${cases.length}`);
   console.log(`Concurrency: ${args.concurrency}`);
   console.log(`Webhook: ${args.webhook}`);

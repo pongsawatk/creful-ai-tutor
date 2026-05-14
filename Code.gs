@@ -97,7 +97,7 @@ function doPost(e) {
 function doGet() {
   return jsonResponse_({
     ok: true,
-    service: 'LAS Foreman AI Tutor logging endpoint',
+    service: 'CrefulLab Foreman Assistant logging endpoint',
     time: new Date().toISOString()
   });
 }

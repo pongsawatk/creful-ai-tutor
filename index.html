@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1565C0">
-  <meta name="description" content="ครูช่าง AI สำหรับหัวหน้าช่าง LAS">
-  <title>ครูช่าง AI</title>
+  <meta name="description" content="CrefulLab สำหรับหัวหน้าช่าง LAS">
+  <title>CrefulLab</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700;800&display=swap">
@@ -19,8 +19,8 @@
         <img src="Logo/Creful%20Logo.png" alt="">
       </div>
       <div class="brand-copy">
-        <h1>ครูช่าง AI</h1>
-        <p>Creful Site Co-pilot</p>
+        <h1>CrefulLab</h1>
+        <p>AI Site Co-pilot</p>
       </div>
       <div class="dev-badge" id="devBadge" hidden>MOCK MODE — ยังไม่ต่อ n8n</div>
       <div class="session-actions">
@@ -37,7 +37,7 @@
     <main class="chat-panel" id="chatPanel" aria-live="polite">
       <section class="empty-state" id="emptyState">
         <div class="empty-intro">
-          <p class="eyebrow">LAS Foreman AI Tutor</p>
+          <p class="eyebrow">CrefulLab Foreman Assistant</p>
           <h2>ถามเรื่องแบบ เอกสาร และสถานการณ์หน้างานได้ครับ</h2>
           <p>เลือกหัวข้อเร็ว หรือพิมพ์คำถามของคุณด้านล่างครับ</p>
         </div>
@@ -320,7 +320,7 @@
       function renderNamePrompt() {
         const prompt = {
           role: "bot",
-          content: "สวัสดีครับ ผมครูช่าง AI บอกชื่อเล่นก่อนเริ่มถามงานได้ครับ",
+          content: "สวัสดีครับ ผม CrefulLab บอกชื่อเล่นก่อนเริ่มถามงานได้ครับ",
           meta: { system: true }
         };
         renderMessage(prompt);
@@ -368,7 +368,7 @@
           extra.className = "extra-info";
           const intro = document.createElement("p");
           intro.className = "extra-info-intro";
-          intro.textContent = "ℹ️ จากฐานความรู้ Creful แนะนำเพิ่ม";
+          intro.textContent = "ℹ️ จากฐานความรู้ CrefulLab แนะนำเพิ่ม";
           extra.appendChild(intro);
           const body = document.createElement("div");
           body.className = "extra-info-body";
@@ -594,7 +594,7 @@
             tooltip: "ขอให้อธิบายใหม่อีกครั้ง",
             action: "request_rewrite",
             prompt: "คำตอบเมื่อกี้ยังไม่ชัดครับ ช่วยอธิบายใหม่ให้ง่ายขึ้น เป็นภาษาไทยหน้างาน และสรุปเป็นขั้นตอนสั้น ๆ ครับ",
-            toast: "ให้ครูช่างอธิบายใหม่ครับ"
+            toast: "ให้ CrefulLab อธิบายใหม่ครับ"
           },
           {
             type: "example",
@@ -779,7 +779,7 @@
         const group = document.createElement("article");
         group.className = "message-group is-bot is-typing";
         group.id = "typingIndicator";
-        group.setAttribute("aria-label", "ครูช่างกำลังพิมพ์");
+        group.setAttribute("aria-label", "CrefulLab กำลังพิมพ์");
         const card = document.createElement("div");
         card.className = "bot-card typing-card";
         const indicator = document.createElement("div");
@@ -787,7 +787,7 @@
         indicator.innerHTML = "<span></span><span></span><span></span>";
         const label = document.createElement("span");
         label.className = "typing-label";
-        label.textContent = "ครูช่างกำลังคิดอยู่ครับ";
+        label.textContent = "CrefulLab กำลังคิดอยู่ครับ";
         card.append(indicator, label);
         group.appendChild(card);
         elements.chatPanel.appendChild(group);

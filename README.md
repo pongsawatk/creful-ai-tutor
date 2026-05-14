@@ -1,6 +1,6 @@
-# Creful AI Tutor
+# CrefulLab
 
-Production rollout project for Creful AI Tutor / Site Co-pilot.
+Production rollout project for CrefulLab / Site Co-pilot.
 
 ## Stack
 

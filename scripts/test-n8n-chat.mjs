@@ -306,7 +306,7 @@ async function main() {
     throw new Error(`Unknown case id: ${args.caseId}`);
   }
 
-  console.log('n8n webhook E2E tester for Creful AI Tutor');
+  console.log('n8n webhook E2E tester for CrefulLab');
   console.log(`Target URL: ${args.url}`);
   console.log('Important: webhook-test accepts one request per "Listen for test event" click and expires in about 2 minutes.');
 
