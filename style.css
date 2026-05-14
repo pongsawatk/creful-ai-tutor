@@ -55,6 +55,56 @@ button {
   -webkit-tap-highlight-color: transparent;
 }
 
+.has-tooltip {
+  position: relative;
+}
+
+.has-tooltip::after {
+  position: absolute;
+  z-index: 50;
+  max-width: 220px;
+  width: max-content;
+  padding: 6px 9px;
+  background: #212121;
+  border-radius: 6px;
+  box-shadow: var(--shadow-2);
+  color: #FFFFFF;
+  content: attr(data-tooltip);
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 18px;
+  opacity: 0;
+  pointer-events: none;
+  text-align: center;
+  transform: translate(-50%, 4px);
+  transition: opacity 140ms ease, transform 140ms ease;
+  white-space: normal;
+}
+
+.has-tooltip[data-tooltip-placement="bottom"]::after {
+  top: calc(100% + 8px);
+  left: 50%;
+}
+
+.has-tooltip[data-tooltip-placement="top"]::after {
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translate(-50%, -4px);
+}
+
+.has-tooltip:hover::after,
+.has-tooltip:focus-visible::after,
+.has-tooltip:focus-within::after {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.has-tooltip[data-tooltip-placement="top"]:hover::after,
+.has-tooltip[data-tooltip-placement="top"]:focus-visible::after,
+.has-tooltip[data-tooltip-placement="top"]:focus-within::after {
+  transform: translate(-50%, 0);
+}
+
 .app-shell {
   display: grid;
   grid-template-rows: auto 1fr auto auto;
@@ -502,6 +552,9 @@ button {
   border-top: 1px dashed rgba(121, 116, 126, 0.35);
   border-radius: 0;
   color: var(--on-surface-variant);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 6px;
   font-size: 12px;
   font-weight: 600;
   justify-self: stretch;
@@ -509,6 +562,20 @@ button {
 
 .citation-chip.is-warning {
   color: #8A5A00;
+}
+
+.citation-part {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+}
+
+.citation-part::after {
+  color: #FFFFFF;
+}
+
+.citation-separator {
+  color: rgba(121, 116, 126, 0.72);
 }
 
 .feedback-row {
@@ -772,6 +839,11 @@ button {
   gap: 10px;
 }
 
+.sync-form[hidden],
+.sync-complete[hidden] {
+  display: none;
+}
+
 .sync-form label {
   color: var(--on-surface);
   font-size: 14px;
@@ -820,6 +892,49 @@ button {
 
 .sync-result[data-status="error"] {
   color: var(--error);
+}
+
+.sync-complete {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 8px 0 0;
+  text-align: center;
+}
+
+.sync-complete-icon {
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  background: #E8F5E9;
+  border: 2px solid #1B5E20;
+  border-radius: 50%;
+  color: #1B5E20;
+  font-size: 34px;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.sync-complete h3 {
+  margin: 2px 0 0;
+  color: var(--on-surface);
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 30px;
+  letter-spacing: 0;
+}
+
+.sync-complete p {
+  margin: 0 0 4px;
+  color: var(--on-surface-variant);
+  font-size: 15px;
+  font-weight: 700;
+  line-height: 24px;
+}
+
+.sync-complete .sync-primary-button {
+  width: 100%;
 }
 
 .sync-modal-actions {

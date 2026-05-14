@@ -24,11 +24,11 @@
       </div>
       <div class="dev-badge" id="devBadge" hidden>MOCK MODE — ยังไม่ต่อ n8n</div>
       <div class="session-actions">
-        <div class="session-pill" id="sessionPill">0</div>
-        <button class="sync-kb-button" id="syncKbButton" type="button" aria-label="Sync KB จาก Notion" title="Sync KB จาก Notion">
+        <div class="session-pill has-tooltip" id="sessionPill" title="จำนวนคำถามใน session นี้" data-tooltip="จำนวนคำถามใน session นี้" data-tooltip-placement="bottom">0</div>
+        <button class="sync-kb-button has-tooltip" id="syncKbButton" type="button" aria-label="Sync KB จาก Notion" title="Sync KB จาก Notion" data-tooltip="Sync KB จาก Notion" data-tooltip-placement="bottom">
           KB
         </button>
-        <button class="reset-session-button" id="resetSessionButton" type="button" aria-label="เริ่ม session ใหม่" title="เริ่ม session ใหม่">
+        <button class="reset-session-button has-tooltip" id="resetSessionButton" type="button" aria-label="เริ่ม session ใหม่" title="เริ่ม session ใหม่" data-tooltip="เริ่ม session ใหม่" data-tooltip-placement="bottom">
           ↻
         </button>
       </div>
@@ -64,7 +64,7 @@
           <h2 id="syncKbTitle">Sync KB</h2>
           <button class="sync-modal-close" id="syncKbCloseButton" type="button" aria-label="ปิด">×</button>
         </div>
-        <p class="sync-modal-copy">ใส่ password เพื่อ sync Notion DB ไป JSON KB</p>
+        <p class="sync-modal-copy" id="syncKbCopy">ใส่ password เพื่อ sync Notion DB ไป JSON KB</p>
         <form class="sync-form" id="syncKbForm" autocomplete="off">
           <label for="syncKbPassword">Password</label>
           <input id="syncKbPassword" name="password" type="password" autocomplete="current-password" required>
@@ -74,6 +74,12 @@
             <button class="sync-primary-button" id="syncKbSubmitButton" type="submit">Sync</button>
           </div>
         </form>
+        <div class="sync-complete" id="syncKbComplete" hidden>
+          <div class="sync-complete-icon" aria-hidden="true">✓</div>
+          <h3>Sync Complete</h3>
+          <p id="syncKbCompleteSummary">Sync KB สำเร็จครับ</p>
+          <button class="sync-primary-button" id="syncKbDoneButton" type="button">ปิด</button>
+        </div>
       </section>
     </div>
   </div>
@@ -163,12 +169,17 @@
         resetSessionButton: document.getElementById("resetSessionButton"),
         syncKbButton: document.getElementById("syncKbButton"),
         syncKbModal: document.getElementById("syncKbModal"),
+        syncKbTitle: document.getElementById("syncKbTitle"),
+        syncKbCopy: document.getElementById("syncKbCopy"),
         syncKbCloseButton: document.getElementById("syncKbCloseButton"),
         syncKbCancelButton: document.getElementById("syncKbCancelButton"),
         syncKbForm: document.getElementById("syncKbForm"),
         syncKbPassword: document.getElementById("syncKbPassword"),
         syncKbResult: document.getElementById("syncKbResult"),
         syncKbSubmitButton: document.getElementById("syncKbSubmitButton"),
+        syncKbComplete: document.getElementById("syncKbComplete"),
+        syncKbCompleteSummary: document.getElementById("syncKbCompleteSummary"),
+        syncKbDoneButton: document.getElementById("syncKbDoneButton"),
         toast: document.getElementById("toast")
       };
 
@@ -213,6 +224,7 @@
         elements.syncKbButton.addEventListener("click", openSyncKbModal);
         elements.syncKbCloseButton.addEventListener("click", closeSyncKbModal);
         elements.syncKbCancelButton.addEventListener("click", closeSyncKbModal);
+        elements.syncKbDoneButton.addEventListener("click", closeSyncKbModal);
         elements.syncKbForm.addEventListener("submit", handleSyncKbSubmit);
         elements.syncKbModal.addEventListener("click", handleSyncKbBackdropClick);
         document.addEventListener("keydown", handleGlobalKeydown);
@@ -488,7 +500,37 @@
       function createCitationChip(meta) {
         const chip = document.createElement("div");
         chip.className = `citation-chip ${meta.kb_relevance < 50 ? "is-warning" : ""}`;
-        chip.textContent = `📚 ${meta.kb_relevance}% | 🎯 ${meta.confidence}% | 🔗 ${meta.doc_id}`;
+
+        [
+          {
+            text: `📚 ${meta.kb_relevance}%`,
+            tooltip: "คะแนนความครอบคลุมของข้อมูล"
+          },
+          {
+            text: `🎯 ${meta.confidence}%`,
+            tooltip: "คะแนนความมั่นใจของคำตอบ"
+          },
+          {
+            text: `🔗 ${meta.doc_id}`,
+            tooltip: "แหล่งอ้างอิงจาก KB"
+          }
+        ].forEach((item, index) => {
+          if (index > 0) {
+            const separator = document.createElement("span");
+            separator.className = "citation-separator";
+            separator.textContent = "|";
+            chip.appendChild(separator);
+          }
+
+          const part = document.createElement("span");
+          part.className = "citation-part has-tooltip";
+          part.textContent = item.text;
+          part.title = item.tooltip;
+          part.dataset.tooltip = item.tooltip;
+          part.dataset.tooltipPlacement = "top";
+          chip.appendChild(part);
+        });
+
         return chip;
       }
 
@@ -507,12 +549,14 @@
           {
             type: "understood",
             label: "👍 เข้าใจแล้ว",
+            tooltip: "บอกว่าคำตอบนี้เข้าใจแล้ว",
             action: "log_positive",
             toast: "บันทึกว่าเข้าใจแล้วครับ"
           },
           {
             type: "unclear",
             label: "🔁 อธิบายใหม่",
+            tooltip: "ขอให้อธิบายใหม่อีกครั้ง",
             action: "request_rewrite",
             prompt: "คำตอบเมื่อกี้ยังไม่ชัดครับ ช่วยอธิบายใหม่ให้ง่ายขึ้น เป็นภาษาไทยหน้างาน และสรุปเป็นขั้นตอนสั้น ๆ ครับ",
             toast: "ให้ครูช่างอธิบายใหม่ครับ"
@@ -520,6 +564,7 @@
           {
             type: "example",
             label: "🧩 ขอตัวอย่าง",
+            tooltip: "ขอตัวอย่างเพิ่มเติม",
             action: "request_example",
             prompt: "ช่วยยกตัวอย่างหน้างานจากคำตอบเมื่อกี้ 1 ตัวอย่าง พร้อมวิธีคิดแบบหัวหน้าช่างครับ",
             toast: "ขอตัวอย่างหน้างานครับ"
@@ -527,14 +572,18 @@
           {
             type: "report_wrong",
             label: "📝 คำตอบผิด",
+            tooltip: "แจ้งว่าคำตอบนี้ผิด",
             action: "trainer_review",
             toast: "รับแจ้งแล้วครับ ทีมจะใช้ข้อมูลนี้ตรวจคำตอบ"
           }
         ].forEach((action) => {
           const button = document.createElement("button");
           button.type = "button";
-          button.className = "feedback-button";
+          button.className = "feedback-button has-tooltip";
           button.textContent = action.label;
+          button.title = action.tooltip;
+          button.dataset.tooltip = action.tooltip;
+          button.dataset.tooltipPlacement = "top";
           button.addEventListener("click", () => {
             if (state.isThinking) {
               showToast("รอคำตอบปัจจุบันจบก่อนครับ");
@@ -736,6 +785,10 @@
       }
 
       function openSyncKbModal() {
+        elements.syncKbTitle.textContent = "Sync KB";
+        elements.syncKbCopy.textContent = "ใส่ password เพื่อ sync Notion DB ไป JSON KB";
+        elements.syncKbForm.hidden = false;
+        elements.syncKbComplete.hidden = true;
         elements.syncKbPassword.value = "";
         elements.syncKbResult.textContent = "";
         elements.syncKbResult.dataset.status = "";
@@ -798,7 +851,7 @@
             throw new Error(data?.message || "Sync KB ไม่สำเร็จครับ");
           }
 
-          setSyncKbResult(formatSyncResult(data), "success");
+          showSyncKbComplete(formatSyncResult(data));
           showToast("Sync KB เรียบร้อยครับ");
         } catch (error) {
           console.error(error);
@@ -814,12 +867,22 @@
         elements.syncKbCloseButton.disabled = isBusy;
         elements.syncKbCancelButton.disabled = isBusy;
         elements.syncKbPassword.disabled = isBusy;
+        elements.syncKbDoneButton.disabled = isBusy;
         elements.syncKbSubmitButton.textContent = isBusy ? "Syncing..." : "Sync";
       }
 
       function setSyncKbResult(message, status) {
         elements.syncKbResult.textContent = message;
         elements.syncKbResult.dataset.status = status;
+      }
+
+      function showSyncKbComplete(summary) {
+        elements.syncKbTitle.textContent = "Sync Complete";
+        elements.syncKbCopy.textContent = "อัปเดต KB จาก Notion เสร็จเรียบร้อยแล้ว";
+        elements.syncKbForm.hidden = true;
+        elements.syncKbComplete.hidden = false;
+        elements.syncKbCompleteSummary.textContent = summary;
+        requestAnimationFrame(() => elements.syncKbDoneButton.focus());
       }
 
       function formatSyncResult(data) {
