@@ -251,7 +251,7 @@ const workflow = {
         },
         sendBody: true,
         specifyBody: 'json',
-        jsonBody: '={{ $json.github_body }}',
+        jsonBody: '={{ $json.http_body }}',
         options: {
           batching: {
             batch: {

@@ -38,6 +38,7 @@ return payloads.map((payloadItem, index) => {
       action,
       http_method: action === 'skip' ? 'GET' : 'PUT',
       github_body: action === 'skip' ? {} : githubBody,
+      http_body: action === 'skip' ? '{}' : JSON.stringify(githubBody),
       sha: existingSha
     }
   };

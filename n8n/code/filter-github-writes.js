@@ -1,1 +1,3 @@
-return $input.all().filter((item) => item.json.action !== 'skip');
+const files = $('Code - Diff GitHub Files').all();
+
+return files.filter((item) => item.json.action !== 'skip');
