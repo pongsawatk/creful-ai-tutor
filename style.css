@@ -46,6 +46,7 @@ body {
 }
 
 button,
+input,
 textarea {
   font: inherit;
 }
@@ -103,7 +104,7 @@ button {
   grid-column: 2;
   grid-row: 1;
   min-width: 0;
-  padding-right: 104px;
+  padding-right: 152px;
 }
 
 .brand-copy h1 {
@@ -127,7 +128,7 @@ button {
   top: calc(10px + env(safe-area-inset-top));
   right: 16px;
   display: inline-grid;
-  grid-template-columns: auto 40px;
+  grid-template-columns: auto 40px 40px;
   align-items: center;
   justify-self: end;
   gap: 8px;
@@ -148,6 +149,7 @@ button {
   text-align: center;
 }
 
+.sync-kb-button,
 .reset-session-button {
   display: grid;
   width: 40px;
@@ -165,11 +167,21 @@ button {
   line-height: 1;
 }
 
+.sync-kb-button {
+  border-color: rgba(21, 101, 192, 0.76);
+  box-shadow: 3px 3px 0 rgba(94, 53, 177, 0.42);
+  color: var(--tertiary);
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.sync-kb-button:active,
 .reset-session-button:active {
   transform: translate(2px, 2px);
   box-shadow: 1px 1px 0 var(--secondary);
 }
 
+.sync-kb-button:disabled,
 .reset-session-button:disabled {
   cursor: not-allowed;
   opacity: 0.58;
@@ -177,6 +189,7 @@ button {
   box-shadow: 3px 3px 0 rgba(255, 143, 0, 0.45);
 }
 
+.sync-kb-button:focus-visible,
 .reset-session-button:focus-visible {
   outline: 3px solid rgba(21, 101, 192, 0.35);
   outline-offset: 3px;
@@ -689,6 +702,160 @@ button {
   font-size: 15px;
   font-weight: 750;
   line-height: 24px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(10, 21, 40, 0.54);
+}
+
+.modal-backdrop[hidden] {
+  display: none;
+}
+
+.sync-modal {
+  display: grid;
+  gap: 14px;
+  width: min(100%, 420px);
+  padding: 18px;
+  background: var(--surface-container);
+  border: 2px solid var(--on-surface);
+  border-radius: var(--radius-md);
+  box-shadow: 6px 6px 0 var(--secondary), var(--shadow-2);
+}
+
+.sync-modal-header {
+  display: grid;
+  grid-template-columns: 1fr 40px;
+  align-items: center;
+  gap: 12px;
+}
+
+.sync-modal h2 {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 850;
+  line-height: 30px;
+  letter-spacing: 0;
+}
+
+.sync-modal-close {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  padding: 0;
+  background: transparent;
+  border: 1px solid rgba(121, 116, 126, 0.32);
+  border-radius: var(--radius-sm);
+  color: var(--on-surface);
+  cursor: pointer;
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sync-modal-copy {
+  margin: -4px 0 0;
+  color: var(--on-surface-variant);
+  font-size: 15px;
+  line-height: 24px;
+}
+
+.sync-form {
+  display: grid;
+  gap: 10px;
+}
+
+.sync-form label {
+  color: var(--on-surface);
+  font-size: 14px;
+  font-weight: 800;
+  line-height: 20px;
+}
+
+.sync-form input {
+  width: 100%;
+  min-height: 48px;
+  padding: 10px 12px;
+  background: #FFFFFF;
+  border: 2px solid rgba(21, 101, 192, 0.34);
+  border-radius: var(--radius-sm);
+  color: var(--on-surface);
+  font-size: 17px;
+  line-height: 26px;
+  outline: none;
+}
+
+.sync-form input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(21, 101, 192, 0.14);
+}
+
+.sync-form input:disabled {
+  background: var(--surface-container-high);
+  color: var(--on-surface-variant);
+}
+
+.sync-result {
+  min-height: 24px;
+  color: var(--on-surface-variant);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 22px;
+}
+
+.sync-result[data-status="pending"] {
+  color: var(--primary);
+}
+
+.sync-result[data-status="success"] {
+  color: #1B5E20;
+}
+
+.sync-result[data-status="error"] {
+  color: var(--error);
+}
+
+.sync-modal-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 2px;
+}
+
+.sync-primary-button,
+.sync-secondary-button {
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 900;
+}
+
+.sync-primary-button {
+  background: var(--primary);
+  border: 0;
+  color: #FFFFFF;
+}
+
+.sync-secondary-button {
+  background: #FFFFFF;
+  border: 2px solid rgba(121, 116, 126, 0.42);
+  color: var(--on-surface);
+}
+
+.sync-primary-button:disabled,
+.sync-secondary-button:disabled,
+.sync-modal-close:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .sr-only {

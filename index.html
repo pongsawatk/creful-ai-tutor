@@ -25,6 +25,9 @@
       <div class="dev-badge" id="devBadge" hidden>MOCK MODE — ยังไม่ต่อ n8n</div>
       <div class="session-actions">
         <div class="session-pill" id="sessionPill">0</div>
+        <button class="sync-kb-button" id="syncKbButton" type="button" aria-label="Sync KB จาก Notion" title="Sync KB จาก Notion">
+          KB
+        </button>
         <button class="reset-session-button" id="resetSessionButton" type="button" aria-label="เริ่ม session ใหม่" title="เริ่ม session ใหม่">
           ↻
         </button>
@@ -54,6 +57,25 @@
     </footer>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+    <div class="modal-backdrop" id="syncKbModal" hidden>
+      <section class="sync-modal" role="dialog" aria-modal="true" aria-labelledby="syncKbTitle">
+        <div class="sync-modal-header">
+          <h2 id="syncKbTitle">Sync KB</h2>
+          <button class="sync-modal-close" id="syncKbCloseButton" type="button" aria-label="ปิด">×</button>
+        </div>
+        <p class="sync-modal-copy">ใส่ password เพื่อ sync Notion DB ไป JSON KB</p>
+        <form class="sync-form" id="syncKbForm" autocomplete="off">
+          <label for="syncKbPassword">Password</label>
+          <input id="syncKbPassword" name="password" type="password" autocomplete="current-password" required>
+          <div class="sync-result" id="syncKbResult" role="status" aria-live="polite"></div>
+          <div class="sync-modal-actions">
+            <button class="sync-secondary-button" id="syncKbCancelButton" type="button">ยกเลิก</button>
+            <button class="sync-primary-button" id="syncKbSubmitButton" type="submit">Sync</button>
+          </div>
+        </form>
+      </section>
+    </div>
   </div>
 
   <script>
@@ -61,6 +83,7 @@
       const runtimeConfig = typeof CONFIG !== "undefined" ? CONFIG : {};
       const config = {
         N8N_WEBHOOK_URL: runtimeConfig.N8N_WEBHOOK_URL || "",
+        KB_SYNC_ENDPOINT: runtimeConfig.KB_SYNC_ENDPOINT || "/api/sync-kb",
         KB_BASE_URL: runtimeConfig.KB_BASE_URL || "",
         SHEET_WEBHOOK_URL: runtimeConfig.SHEET_WEBHOOK_URL || "",
         INPUT_MAX_LENGTH: Number(runtimeConfig.INPUT_MAX_LENGTH || 500)
@@ -138,6 +161,14 @@
         statusLine: document.getElementById("statusLine"),
         sessionPill: document.getElementById("sessionPill"),
         resetSessionButton: document.getElementById("resetSessionButton"),
+        syncKbButton: document.getElementById("syncKbButton"),
+        syncKbModal: document.getElementById("syncKbModal"),
+        syncKbCloseButton: document.getElementById("syncKbCloseButton"),
+        syncKbCancelButton: document.getElementById("syncKbCancelButton"),
+        syncKbForm: document.getElementById("syncKbForm"),
+        syncKbPassword: document.getElementById("syncKbPassword"),
+        syncKbResult: document.getElementById("syncKbResult"),
+        syncKbSubmitButton: document.getElementById("syncKbSubmitButton"),
         toast: document.getElementById("toast")
       };
 
@@ -149,7 +180,8 @@
         mode: "AWAITING_NAME",
         history: readJson(storageKeys.history, []),
         userMessageCount: Number(localStorage.getItem(storageKeys.userMessageCount) || 0),
-        isThinking: false
+        isThinking: false,
+        isSyncingKb: false
       };
 
       init();
@@ -178,6 +210,12 @@
         elements.messageInput.addEventListener("paste", handlePaste);
         elements.messageInput.addEventListener("keydown", handleEnterKey);
         elements.resetSessionButton.addEventListener("click", resetSession);
+        elements.syncKbButton.addEventListener("click", openSyncKbModal);
+        elements.syncKbCloseButton.addEventListener("click", closeSyncKbModal);
+        elements.syncKbCancelButton.addEventListener("click", closeSyncKbModal);
+        elements.syncKbForm.addEventListener("submit", handleSyncKbSubmit);
+        elements.syncKbModal.addEventListener("click", handleSyncKbBackdropClick);
+        document.addEventListener("keydown", handleGlobalKeydown);
       }
 
       function handleEnterKey(event) {
@@ -695,6 +733,108 @@
 
       function updateMockBadge() {
         elements.devBadge.hidden = !isMockMode();
+      }
+
+      function openSyncKbModal() {
+        elements.syncKbPassword.value = "";
+        elements.syncKbResult.textContent = "";
+        elements.syncKbResult.dataset.status = "";
+        elements.syncKbModal.hidden = false;
+        setSyncKbBusy(false);
+        requestAnimationFrame(() => elements.syncKbPassword.focus());
+      }
+
+      function closeSyncKbModal() {
+        if (state.isSyncingKb) return;
+        elements.syncKbModal.hidden = true;
+      }
+
+      function handleSyncKbBackdropClick(event) {
+        if (event.target === elements.syncKbModal) {
+          closeSyncKbModal();
+        }
+      }
+
+      function handleGlobalKeydown(event) {
+        if (event.key === "Escape" && !elements.syncKbModal.hidden) {
+          closeSyncKbModal();
+        }
+      }
+
+      async function handleSyncKbSubmit(event) {
+        event.preventDefault();
+        if (state.isSyncingKb) return;
+
+        const password = elements.syncKbPassword.value.trim();
+        if (!password) {
+          setSyncKbResult("กรุณาใส่ password ก่อนครับ", "error");
+          elements.syncKbPassword.focus();
+          return;
+        }
+
+        state.isSyncingKb = true;
+        setSyncKbBusy(true);
+        setSyncKbResult("กำลัง sync KB จาก Notion...", "pending");
+
+        try {
+          const response = await fetch(config.KB_SYNC_ENDPOINT, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              password,
+              run_reason: "manual interface sync",
+              requested_by: state.nickname || "creful-interface",
+              session_id: state.sessionId
+            })
+          });
+
+          const data = await readWebhookResponse(response);
+
+          if (response.status === 401 || data?.error === "INVALID_PASSWORD") {
+            throw new Error("Password ไม่ถูกต้องครับ");
+          }
+
+          if (!response.ok || data?.ok === false) {
+            throw new Error(data?.message || "Sync KB ไม่สำเร็จครับ");
+          }
+
+          setSyncKbResult(formatSyncResult(data), "success");
+          showToast("Sync KB เรียบร้อยครับ");
+        } catch (error) {
+          console.error(error);
+          setSyncKbResult(error.message || "Sync KB ไม่สำเร็จครับ", "error");
+        } finally {
+          state.isSyncingKb = false;
+          setSyncKbBusy(false);
+        }
+      }
+
+      function setSyncKbBusy(isBusy) {
+        elements.syncKbSubmitButton.disabled = isBusy;
+        elements.syncKbCloseButton.disabled = isBusy;
+        elements.syncKbCancelButton.disabled = isBusy;
+        elements.syncKbPassword.disabled = isBusy;
+        elements.syncKbSubmitButton.textContent = isBusy ? "Syncing..." : "Sync";
+      }
+
+      function setSyncKbResult(message, status) {
+        elements.syncKbResult.textContent = message;
+        elements.syncKbResult.dataset.status = status;
+      }
+
+      function formatSyncResult(data) {
+        const result = Array.isArray(data?.result) ? data.result[0] : data?.result;
+        const summary = result?.json || result || {};
+        const parts = [];
+
+        if (Number.isFinite(summary.synced)) parts.push(`synced ${summary.synced}`);
+        if (Number.isFinite(summary.created)) parts.push(`created ${summary.created}`);
+        if (Number.isFinite(summary.updated)) parts.push(`updated ${summary.updated}`);
+        if (Number.isFinite(summary.skipped)) parts.push(`skipped ${summary.skipped}`);
+
+        return parts.length
+          ? `Sync สำเร็จครับ (${parts.join(", ")})`
+          : "Sync สำเร็จครับ";
       }
 
       function getMockResponse(message) {
